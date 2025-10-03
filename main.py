@@ -7,6 +7,9 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -484,7 +487,7 @@ class AskResponse(BaseModel):
     citations: List[dict]  # [{title, category, pages, heading_path, chunk_index}]
 
 # Initialize Q&A components if available
-if QA_AVAILABLE and os.environ.get("OPENAI_API_KEY"):
+if QA_AVAILABLE and os.getenv("OPENAI_API_KEY"):
     EMB = OpenAIEmbeddings(model="text-embedding-3-small")
     LLM = ChatOpenAI(model=ANSWER_MODEL, temperature=0)
     
@@ -561,8 +564,8 @@ def load_supabase_retriever(category: str):
     except ImportError:
         raise HTTPException(500, "Supabase dependencies not available")
     
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
     if not url or not key:
         raise HTTPException(500, "Supabase credentials not configured")
     
@@ -1453,7 +1456,7 @@ async def ask_question(req: AskRequest):
     if not QA_AVAILABLE:
         raise HTTPException(500, "Q&A functionality not available - missing dependencies")
     
-    if not os.environ.get("OPENAI_API_KEY"):
+    if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(500, "OpenAI API key not configured")
     
     category = validate_qa_category(req.category)
@@ -1496,7 +1499,7 @@ async def qa_status():
     """Get Q&A system status and configuration."""
     return {
         "qa_available": QA_AVAILABLE,
-        "openai_configured": bool(os.environ.get("OPENAI_API_KEY")),
+        "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
         "retrieval_backend": RETRIEVAL_BACKEND if QA_AVAILABLE else None,
         "indexes_path": str(INDEXES_LOCAL_ROOT) if QA_AVAILABLE else None,
         "supported_categories": QA_CATEGORIES,
