@@ -1,5 +1,228 @@
 -- supabase_functions.sql
--- Run this in your Supabase SQL Editor to create the required functions
+-- Phase 2: Per-Category pgvector Tables for ACEP Document Processing
+-- Run this in your Supabase SQL Editor
+
+-- ==========================================
+-- PHASE 2: CREATE PER-CATEGORY TABLES
+-- ==========================================
+
+-- Enable pgvector extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Table 1: Board and Committee Proceedings
+CREATE TABLE IF NOT EXISTS vs_board_committees (
+  id text PRIMARY KEY,            -- chunk_id = sha256(text)
+  content text NOT NULL,
+  metadata jsonb NOT NULL,
+  embedding vector(1536)          -- OpenAI text-embedding-3-small (1536 dimensions, faster & cheaper)
+);
+
+-- Table 2: By-Laws & Governance Policies  
+CREATE TABLE IF NOT EXISTS vs_bylaws (
+  id text PRIMARY KEY,            -- chunk_id = sha256(text)
+  content text NOT NULL,
+  metadata jsonb NOT NULL,
+  embedding vector(1536)          -- OpenAI text-embedding-3-small (1536 dimensions, faster & cheaper)
+);
+
+-- Table 3: External Advocacy & Communications
+CREATE TABLE IF NOT EXISTS vs_external_advocacy (
+  id text PRIMARY KEY,            -- chunk_id = sha256(text)
+  content text NOT NULL,
+  metadata jsonb NOT NULL,
+  embedding vector(1536)          -- OpenAI text-embedding-3-small (1536 dimensions, faster & cheaper)
+);
+
+-- Table 4: Policy & Position Statements
+CREATE TABLE IF NOT EXISTS vs_policy_positions (
+  id text PRIMARY KEY,            -- chunk_id = sha256(text)
+  content text NOT NULL,
+  metadata jsonb NOT NULL,
+  embedding vector(1536)          -- OpenAI text-embedding-3-small (1536 dimensions, faster & cheaper)
+);
+
+-- Table 5: Resolutions
+CREATE TABLE IF NOT EXISTS vs_resolutions (
+  id text PRIMARY KEY,            -- chunk_id = sha256(text)
+  content text NOT NULL,
+  metadata jsonb NOT NULL,
+  embedding vector(1536)          -- OpenAI text-embedding-3-small (1536 dimensions, faster & cheaper)
+);
+
+-- ==========================================
+-- PHASE 2: CREATE INDEXES FOR PERFORMANCE
+-- ==========================================
+
+-- Create HNSW indexes for efficient vector similarity search
+-- Note: Only create indexes after inserting data for better performance
+
+-- Board and Committee Proceedings
+CREATE INDEX IF NOT EXISTS vs_board_committees_embedding_idx 
+ON vs_board_committees USING hnsw (embedding vector_cosine_ops);
+
+-- By-Laws & Governance Policies
+CREATE INDEX IF NOT EXISTS vs_bylaws_embedding_idx 
+ON vs_bylaws USING hnsw (embedding vector_cosine_ops);
+
+-- External Advocacy & Communications  
+CREATE INDEX IF NOT EXISTS vs_external_advocacy_embedding_idx 
+ON vs_external_advocacy USING hnsw (embedding vector_cosine_ops);
+
+-- Policy & Position Statements
+CREATE INDEX IF NOT EXISTS vs_policy_positions_embedding_idx 
+ON vs_policy_positions USING hnsw (embedding vector_cosine_ops);
+
+-- Resolutions
+CREATE INDEX IF NOT EXISTS vs_resolutions_embedding_idx 
+ON vs_resolutions USING hnsw (embedding vector_cosine_ops);
+
+-- ==========================================
+-- PHASE 2: CATEGORY-SPECIFIC SEARCH FUNCTIONS
+-- ==========================================
+
+-- Search function for Board and Committee Proceedings
+CREATE OR REPLACE FUNCTION search_board_committees(
+  query_embedding vector(1536),
+  match_threshold float DEFAULT 0.7,
+  match_count int DEFAULT 10
+)
+RETURNS TABLE (
+  id text,
+  content text,
+  metadata jsonb,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    vs.id,
+    vs.content,
+    vs.metadata,
+    1 - (vs.embedding <=> query_embedding) as similarity
+  FROM vs_board_committees vs
+  WHERE 1 - (vs.embedding <=> query_embedding) > match_threshold
+  ORDER BY vs.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- Search function for By-Laws & Governance Policies
+CREATE OR REPLACE FUNCTION search_bylaws(
+  query_embedding vector(1536),
+  match_threshold float DEFAULT 0.7,
+  match_count int DEFAULT 10
+)
+RETURNS TABLE (
+  id text,
+  content text,
+  metadata jsonb,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    vs.id,
+    vs.content,
+    vs.metadata,
+    1 - (vs.embedding <=> query_embedding) as similarity
+  FROM vs_bylaws vs
+  WHERE 1 - (vs.embedding <=> query_embedding) > match_threshold
+  ORDER BY vs.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- Search function for External Advocacy & Communications
+CREATE OR REPLACE FUNCTION search_external_advocacy(
+  query_embedding vector(1536),
+  match_threshold float DEFAULT 0.7,
+  match_count int DEFAULT 10
+)
+RETURNS TABLE (
+  id text,
+  content text,
+  metadata jsonb,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    vs.id,
+    vs.content,
+    vs.metadata,
+    1 - (vs.embedding <=> query_embedding) as similarity
+  FROM vs_external_advocacy vs
+  WHERE 1 - (vs.embedding <=> query_embedding) > match_threshold
+  ORDER BY vs.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- Search function for Policy & Position Statements
+CREATE OR REPLACE FUNCTION search_policy_positions(
+  query_embedding vector(1536),
+  match_threshold float DEFAULT 0.7,
+  match_count int DEFAULT 10
+)
+RETURNS TABLE (
+  id text,
+  content text,
+  metadata jsonb,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    vs.id,
+    vs.content,
+    vs.metadata,
+    1 - (vs.embedding <=> query_embedding) as similarity
+  FROM vs_policy_positions vs
+  WHERE 1 - (vs.embedding <=> query_embedding) > match_threshold
+  ORDER BY vs.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- Search function for Resolutions
+CREATE OR REPLACE FUNCTION search_resolutions(
+  query_embedding vector(1536),
+  match_threshold float DEFAULT 0.7,
+  match_count int DEFAULT 10
+)
+RETURNS TABLE (
+  id text,
+  content text,
+  metadata jsonb,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    vs.id,
+    vs.content,
+    vs.metadata,
+    1 - (vs.embedding <=> query_embedding) as similarity
+  FROM vs_resolutions vs
+  WHERE 1 - (vs.embedding <=> query_embedding) > match_threshold
+  ORDER BY vs.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- ==========================================
+-- LEGACY FUNCTIONS (Phase 1 - for reference)
+-- ==========================================
 
 -- Function 1: Vector search with folder filter
 CREATE OR REPLACE FUNCTION match_documents_by_folder(
