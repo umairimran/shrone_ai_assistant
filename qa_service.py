@@ -3,6 +3,10 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from qa_config import (
     RETRIEVAL_BACKEND, INDEXES_LOCAL_ROOT, CATEGORIES,
@@ -17,6 +21,9 @@ from langchain_core.documents import Document
 
 app = FastAPI(title="ACEP Document QA", version="1.0.0")
 
+print("CATEGORIES:", CATEGORIES)
+print("INDEXES_LOCAL_ROOT:", INDEXES_LOCAL_ROOT)
+print("exists?", p.exists(), "path:", p)
 # --- Models ---
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=3)
@@ -116,11 +123,12 @@ def ask(req: AskRequest):
     retriever = get_retriever(category)
     k = req.top_k or TOP_K
     # pull a few more for better diversity when using FAISS/MMR
-    docs = retriever.get_relevant_documents(req.question)[:k]
+    docs = retriever.get_relevant_documents(req.question)
     if not docs:
         return AskResponse(answer="I don't have that information in the provided documents.", citations=[])
 
     ctx = format_context(docs)
+
     chain = PROMPT | LLM
     ans = chain.invoke({"category": category, "question": req.question, "context": ctx}).content
 

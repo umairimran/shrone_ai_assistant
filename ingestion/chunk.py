@@ -16,7 +16,7 @@ except ImportError:
 from .schemas import Chunk
 
 
-def chunk_blocks(blocks: List[Dict], max_tokens: int = 1000, overlap_tokens: int = 120, 
+def chunk_blocks(blocks: List[Dict], max_tokens: int = 1000, overlap_tokens: int = 200, 
                 tokenizer: Optional[Any] = None) -> List[Dict]:
     """
     Chunk blocks using real tokens with sliding windows and overlap.
@@ -26,7 +26,7 @@ def chunk_blocks(blocks: List[Dict], max_tokens: int = 1000, overlap_tokens: int
     Args:
         blocks: List of block dictionaries from structure detection
         max_tokens: Maximum tokens per chunk (default: 1000)
-        overlap_tokens: Overlap tokens between chunks (default: 120)
+        overlap_tokens: Overlap tokens between chunks (default: 200)
         tokenizer: Optional tokenizer (uses tiktoken cl100k_base if None)
         
     Returns:

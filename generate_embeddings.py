@@ -158,8 +158,7 @@ def generate_embeddings_batch(texts: List[str], log_file: Path) -> List[List[flo
         response = openai.embeddings.create(
             input=texts,
             model="text-embedding-3-small"  # 1536 dimensions (fits Supabase HNSW limit)
-        )
-        
+        )        
         embeddings = [embedding.embedding for embedding in response.data]
         return embeddings
         

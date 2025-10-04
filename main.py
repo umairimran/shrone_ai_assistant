@@ -1,14 +1,19 @@
 
 import os
+import sys
+import platform
 import tempfile
 import json
 import time
 import re
+import hashlib
+import tiktoken
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict
-import os
 from dotenv import load_dotenv
+
+# Load environment variables from .env file
 load_dotenv()
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
@@ -44,8 +49,8 @@ except ImportError:
 
 # Configuration constants
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-MAX_TOKENS_PER_CHUNK = 2000      # Maximum chunk size
-MAX_OVERLAP_TOKENS = 500         # Maximum overlap
+MAX_TOKENS_PER_CHUNK = 1000      # Maximum chunk size
+MAX_OVERLAP_TOKENS = 200         # Maximum overlap
 SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.md'}
 OCR_LANGUAGES = {'eng', 'fra', 'deu', 'spa', 'ita', 'por', 'rus', 'chi_sim', 'chi_tra', 'jpn', 'kor'}
 
@@ -54,7 +59,7 @@ OCR_LANGUAGES = {'eng', 'fra', 'deu', 'spa', 'ita', 'por', 'rus', 'chi_sim', 'ch
 SAVE_DIR = Path("./processed_output/")
 SAVE_DIR.mkdir(exist_ok=True)
 
-def validate_embedding_safety(chunks: List[Dict], target_range: tuple = (600, 1000)) -> Dict:
+def validate_embedding_safety(chunks: List[Dict], target_range: tuple = (400, 800)) -> Dict:
     """
     Embedding safety validation pass with deduplication and quality checks.
     
@@ -65,7 +70,6 @@ def validate_embedding_safety(chunks: List[Dict], target_range: tuple = (600, 10
     Returns:
         Dict with validation results and warnings
     """
-    import hashlib
     
     if not chunks:
         return {"status": "error", "message": "No chunks to validate"}
@@ -167,14 +171,14 @@ def validate_embedding_safety(chunks: List[Dict], target_range: tuple = (600, 10
     return stats
 
 
-def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (600, 1000)) -> List[Dict]:
+def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (400, 800)) -> List[Dict]:
     """
     SIMPLIFIED CHUNKING: Focus on content preservation over optimization.
     
     Simple rules:
     1. Keep ALL content (zero data loss guarantee)
     2. Merge very small chunks (< 200 tokens) with neighbors
-    3. Split very large chunks (> 1500 tokens) at paragraph boundaries
+    3. Split very large chunks (> 1000 tokens) at paragraph boundaries
     4. Keep everything else as-is
     
     This approach is much simpler, faster, and more reliable than complex optimization.
@@ -184,7 +188,6 @@ def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (600, 1000))
     
     # Import tokenizer for accurate token counting
     try:
-        import tiktoken
         tokenizer = tiktoken.get_encoding("cl100k_base")
     except ImportError:
         tokenizer = None
@@ -228,8 +231,8 @@ def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (600, 1000))
                 combined_text = text + "\n\n" + next_text
                 combined_tokens = count_tokens(combined_text)
                 
-                # Only merge if result is reasonable size (< 1500 tokens)
-                if combined_tokens <= 1500:
+                # Only merge if result is reasonable size (< 1000 tokens)
+                if combined_tokens <= 1000:
                     merged_chunk = {
                         "text": combined_text,
                         "token_count": combined_tokens,
@@ -242,8 +245,8 @@ def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (600, 1000))
                     i += 2  # Skip both chunks since we merged them
                     continue
         
-        # RULE 2: Split very large chunks (> 1500 tokens) at paragraph boundaries
-        elif accurate_count > 1500:
+        # RULE 2: Split very large chunks (> 1000 tokens) at paragraph boundaries
+        elif accurate_count > 1000:
             paragraphs = text.split('\n\n')
             current_text = ""
             current_tokens = 0
@@ -256,8 +259,8 @@ def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (600, 1000))
                     
                 para_tokens = count_tokens(para)
                 
-                # If adding this paragraph would exceed 1500 tokens, save current chunk
-                if current_tokens > 0 and current_tokens + para_tokens > 1500:
+                # If adding this paragraph would exceed 1000 tokens, save current chunk
+                if current_tokens > 0 and current_tokens + para_tokens > 1000:
                     if current_text:
                         split_chunk = {
                             "text": current_text,
@@ -294,7 +297,7 @@ def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (600, 1000))
                 }
                 enhanced_chunks.append(final_chunk)
         
-        # RULE 3: Keep normal-sized chunks as-is (200-1500 tokens)
+        # RULE 3: Keep normal-sized chunks as-is (200-1000 tokens)
         else:
             enhanced_chunks.append(chunk)
         
@@ -304,17 +307,17 @@ def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (600, 1000))
     if enhanced_chunks:
         total_chunks = len(enhanced_chunks)
         small_chunks = sum(1 for chunk in enhanced_chunks if chunk.get("token_count", 0) < 200)
-        large_chunks = sum(1 for chunk in enhanced_chunks if chunk.get("token_count", 0) > 1500)
+        large_chunks = sum(1 for chunk in enhanced_chunks if chunk.get("token_count", 0) > 1000)
         normal_chunks = total_chunks - small_chunks - large_chunks
         
         print(f"SIMPLIFIED CHUNKING: {total_chunks} chunks created")
-        print(f"Distribution: {small_chunks} small (<200), {normal_chunks} normal (200-1500), {large_chunks} large (>1500)")
+        print(f"Distribution: {small_chunks} small (<200), {normal_chunks} normal (200-1000), {large_chunks} large (>1000)")
         print(f"ZERO DATA LOSS: All content preserved with simple, reliable processing")
     
     return enhanced_chunks
 
 
-def validate_chunks_quality(chunks: List[Dict], target_range: tuple = (600, 1000)) -> Dict:
+def validate_chunks_quality(chunks: List[Dict], target_range: tuple = (400, 800)) -> Dict:
     """
     SIMPLIFIED VALIDATION: Basic quality metrics without complex targeting.
     
@@ -327,8 +330,8 @@ def validate_chunks_quality(chunks: List[Dict], target_range: tuple = (600, 1000
     
     # Count distribution by simple size categories
     small_chunks = sum(1 for chunk in chunks if chunk.get("token_count", 0) < 200)
-    normal_chunks = sum(1 for chunk in chunks if 200 <= chunk.get("token_count", 0) <= 1500)
-    large_chunks = sum(1 for chunk in chunks if chunk.get("token_count", 0) > 1500)
+    normal_chunks = sum(1 for chunk in chunks if 200 <= chunk.get("token_count", 0) <= 1000)
+    large_chunks = sum(1 for chunk in chunks if chunk.get("token_count", 0) > 1000)
     
     quality_report = {
         "total_chunks": total_chunks,
@@ -377,31 +380,19 @@ def _safe_slug(text: str) -> str:
 
 
 def is_valid_date(date_str: str) -> bool:
-    """Validate date format and ensure it's not in the future."""
+    """Validate date format YYYY-MM-DD and not in the future."""
     if not date_str:
         return False
-    
     try:
-        from datetime import datetime
-        parsed_date = datetime.strptime(date_str, "%Y-%m-%d")
-        # Check if date is not in the future
-        today = datetime.now().date()
-        return parsed_date.date() <= today
-    except ValueError:
+        from datetime import datetime, date
+        parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
+        return parsed <= date.today()
+    except Exception:
         return False
-    
-    for pattern in year_patterns:
-        matches = re.findall(pattern, filename)
-        for match in matches:
-            year = int(match)
-            # Reasonable year range for documents
-            if 1990 <= year <= 2030:
-                return year
-    
-    return None
 
 
-def create_chunks(text: str, max_tokens: int = 1000, overlap: int = 120) -> List[Dict]:
+
+def create_chunks(text: str, max_tokens: int = 1000, overlap: int = 200) -> List[Dict]:
     """
     Simple chunking function for compatibility.
     """
@@ -696,8 +687,8 @@ async def preprocess_document(
     is_current: bool = Form(True, description="Is current version (default: true)"),
     ocr_language: str = Form("eng", description="OCR language code (default: eng) - See /ocr-languages for options"),
     ocr_dpi: int = Form(300, description="OCR DPI (default: 300) - Range: 150-600"),
-    max_tokens_per_chunk: int = Form(1000, description="Maximum tokens per chunk (default: 1000) - Range: 100-2000"),
-    overlap_tokens: int = Form(120, description="Overlap tokens between chunks (default: 120) - Range: 0-500")
+    max_tokens_per_chunk: int = Form(1000, description="Maximum tokens per chunk (default: 1000) - Range: 100-1000"),
+    overlap_tokens: int = Form(200, description="Overlap tokens between chunks (default: 200) - Range: 0-200")
 ) -> PreprocessResponse:
     """
     Preprocess a document through the ACEP ingestion pipeline.
@@ -713,8 +704,8 @@ async def preprocess_document(
     
     Constraints:
     - File size: Maximum 50MB
-    - Chunk tokens: 100-2000 range
-    - Overlap tokens: 0-500 range
+    - Chunk tokens: 100-1000 range
+    - Overlap tokens: 0-200 range
     - Categories: Must match exact ACEP categories
     """
     
@@ -820,7 +811,6 @@ async def preprocess_document(
     # Validate issued_date format if provided
     if issued_date:
         try:
-            from datetime import datetime, date
             parsed_date = datetime.strptime(issued_date, "%Y-%m-%d").date()
             if parsed_date > date.today():
                 raise HTTPException(
@@ -930,14 +920,14 @@ async def preprocess_document(
         
         # Enhanced chunk quality processing with error handling
         try:
-            chunk_dicts = enhance_chunk_quality(chunk_dicts, target_range=(600, 1000))
+            chunk_dicts = enhance_chunk_quality(chunk_dicts, target_range=(400, 800))
         except Exception as enhancement_error:
             print(f"WARNING: Chunk enhancement failed, using original chunks: {enhancement_error}")
             # Continue with original chunks if enhancement fails
         
         # Quality gate validation before saving
         try:
-            quality_report = validate_chunks_quality(chunk_dicts, target_range=(600, 1000))
+            quality_report = validate_chunks_quality(chunk_dicts, target_range=(400, 800))
             print(f"Quality Report: {quality_report.get('quality_grade', 'Unknown')} - {quality_report.get('target_percentage', 0):.1f}% in target range")
         except Exception as validation_error:
             print(f"WARNING: Chunk validation failed: {validation_error}")
@@ -945,7 +935,7 @@ async def preprocess_document(
         
         # Embedding safety validation with error handling
         try:
-            safety_results = validate_embedding_safety(chunk_dicts, target_range=(600, 1000))
+            safety_results = validate_embedding_safety(chunk_dicts, target_range=(400, 800))
             print(f"Embedding Safety: {safety_results['status']} - {safety_results['message']}")
             
             if safety_results["warnings"]:
@@ -1111,7 +1101,7 @@ async def upload_and_preprocess(
         'ocr_language': 'eng',
         'ocr_dpi': 300,
         'max_tokens_per_chunk': 1000,
-        'overlap_tokens': 120
+        'overlap_tokens': 200
     }
 
     # Call the engine endpoint (reuses all validations & processing)
@@ -1247,7 +1237,7 @@ async def batch_upload_and_preprocess(
                     ocr_language='eng',
                     ocr_dpi=300,
                     max_tokens_per_chunk=1000,
-                    overlap_tokens=120
+                    overlap_tokens=200
                 )
                 
                 # Add batch info
@@ -1358,13 +1348,13 @@ async def validate_json_file(
         
         # Run validation checks
         quality_results = []
-        safety_results = validate_embedding_safety(chunk_dicts, target_range=(600, 1000))
+        safety_results = validate_embedding_safety(chunk_dicts, target_range=(400, 800))
         
         # Basic chunk validation without strict errors
         try:
             # Quality validation for display purposes
             try:
-                quality_report = validate_chunks_quality(chunk_dicts, target_range=(600, 1000))
+                quality_report = validate_chunks_quality(chunk_dicts, target_range=(400, 800))
                 print(f"Validation Quality: {quality_report.get('quality_grade', 'Unknown')}")
             except Exception as validation_error:
                 print(f"WARNING: Chunk validation failed: {validation_error}")
@@ -1444,55 +1434,103 @@ async def validate_json_file(
 
 
 # === Q&A ENDPOINTS ===
-
 @app.post("/v1/ask", response_model=AskResponse)
 async def ask_question(req: AskRequest):
-    """
-    Ask a question about ACEP documents in a specific category.
-    
-    Retrieves relevant passages from the indexed documents and uses an LLM
-    to provide accurate answers with citations.
-    """
     if not QA_AVAILABLE:
         raise HTTPException(500, "Q&A functionality not available - missing dependencies")
-    
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(500, "OpenAI API key not configured")
-    
+
+    # normalize / validate category the same way as before
     category = validate_qa_category(req.category)
+
+    # get retriever
     retriever = get_retriever(category)
     k = req.top_k or TOP_K
-    
-    # Retrieve relevant documents
-    docs = retriever.get_relevant_documents(req.question)[:k]
-    if not docs:
-        return AskResponse(
-            answer="I don't have that information in the provided documents.", 
-            citations=[]
-        )
 
-    # Format context and get LLM answer
+    # OVER-FETCH then slice: let retriever return many candidates, then take top k
+    all_docs = retriever.get_relevant_documents(req.question)
+    if not all_docs:
+        return AskResponse(answer="I don't have that information in the provided documents.", citations=[])
+
+    # debug: (optional) log how many were returned
+    # print("retriever returned total:", len(all_docs))
+
+    docs = all_docs # send top k to LLM
+
+    # Build context and call LLM (unchanged)
     ctx = format_context(docs)
     chain = PROMPT | LLM
     ans = chain.invoke({
-        "category": category, 
-        "question": req.question, 
+        "category": category,
+        "question": req.question,
         "context": ctx
     }).content
 
-    # Build citations from top docs
+    # Helper to read many possible metadata keys safely
+    def meta_get(m: dict, *keys, default=""):
+        for key in keys:
+            if key in m and m[key] not in (None, ""):
+                return m[key]
+        return default
+    
+    def safe_load_meta(raw_meta):
+        if raw_meta is None:
+            return {}
+        if isinstance(raw_meta, dict):
+            return raw_meta
+        if isinstance(raw_meta, str):
+            try:
+                return json.loads(raw_meta)
+            except Exception:
+                return {"raw": raw_meta}
+        try:
+            return dict(raw_meta)
+        except Exception:
+            return {}
+
+    def first_n_text(text, n=240):
+        if not text:
+            return ""
+        t = text.strip().replace("\n", " ")
+        return t[:n] + ("…" if len(t) > n else "")
+
+    # Build rich citations
     cites = []
     for d in docs[:5]:
-        m = d.metadata or {}
-        cites.append({
-            "title": m.get("title", ""),
-            "category": m.get("category", ""),
-            "pages": f'{m.get("page_start")}–{m.get("page_end")}',
-            "heading_path": m.get("heading_path", ""),
-            "chunk_index": m.get("chunk_index", None)
-        })
+        m_raw = d.metadata
+        m = safe_load_meta(m_raw)
 
+        # First look for nested 'document' object
+        doc_obj = m.get("document") if isinstance(m, dict) else None
+        if not isinstance(doc_obj, dict):
+            doc_obj = {}
+
+        # Extract fields with fallbacks
+        title = doc_obj.get("title") or m.get("title") or m.get("doc_title") or ""
+        category = doc_obj.get("category") or m.get("category") or m.get("folder") or ""
+        issued_date = doc_obj.get("issued_date") or doc_obj.get("date") or m.get("issued_date") or m.get("date") or ""
+        year = doc_obj.get("year") or m.get("year") or None
+
+        # Create citation_text from chunk text (short excerpt)
+        citation_text = first_n_text(d.page_content or "")
+
+        # Build the exact structure you requested
+        citation_entry = {
+            "document": {
+                "title": title,
+                "category": category,
+                "issued_date": issued_date,
+                "year": year,
+                "citation_text": citation_text
+            },
+        }
+
+        cites.append(citation_entry)
+
+    # return as before
     return AskResponse(answer=ans, citations=cites)
+
 
 @app.get("/v1/qa-status")
 async def qa_status():

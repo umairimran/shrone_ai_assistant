@@ -21,11 +21,36 @@ import argparse
 import shutil
 from pathlib import Path
 from collections import defaultdict
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from supabase import create_client
 from embeddings_config import CATEGORY_MAP, SUPABASE_TABLE_BY_CATEGORY, OPENAI_EMBED_MODEL, BATCH_SIZE
+
+
+# --- add this helper near top of file (after imports) ---
+def sanitize_obj(o):
+    """
+    Recursively remove NUL characters and ensure strings are safe for Postgres.
+    Returns a cleaned copy (does not mutate original).
+    """
+    if o is None:
+        return o
+    if isinstance(o, str):
+        # Remove NULs and other invisible control characters if desired
+        # Keep common whitespace like \n, . Strip only NUL (\x00).
+        return o.replace('\x00', '')
+    if isinstance(o, dict):
+        return {k: sanitize_obj(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [sanitize_obj(v) for v in o]
+    # other scalars (int, float, bool)
+    return o
+
 
 # Configuration
 JSON_ROOT = Path("processed_output")
@@ -157,71 +182,121 @@ def build_local_faiss(category: str, docs: list[Document], embedder, rebuild=Fal
 def upsert_supabase(category: str, docs: list[Document], embedder, rebuild=False):
     """
     Upsert documents to Supabase table for a category.
-    
+
     Args:
         category: Category name
         docs: List of LangChain Documents
         embedder: LangChain embeddings instance
         rebuild: Whether to truncate table first
-        
+
     Returns:
         str: Table name that was updated
     """
     # Use service key for admin operations as specified
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
-    
+
     if not url or not key:
         raise RuntimeError("Missing SUPABASE_URL / SUPABASE_SERVICE_KEY (or SUPABASE_KEY)")
-    
+
     client = create_client(url, key)
     table = SUPABASE_TABLE_BY_CATEGORY[category]
-    
+
     if rebuild:
         print(f"  Rebuilding Supabase: truncating {table}")
         # Truncate table by deleting all rows
-        client.table(table).delete().neq("id", "__never__").execute()
-    
+        from supabase.lib.client_options import ClientOptions
+        client = create_client(url, key, options=ClientOptions(postgrest_client_timeout=300))  # ⏱ longer timeout
+
+        print(f"  Rebuilding Supabase: clearing table {table} in smaller batches...")
+        try:
+            # Delete rows in small chunks (avoids timeouts)
+            while True:
+                res = client.table(table).select("id").limit(1000).execute()
+                if not res.data:
+                    break
+                ids = [r["id"] for r in res.data]
+                client.table(table).delete().in_("id", ids).execute()
+                print(f"    Deleted {len(ids)} rows...")
+        except Exception as e:
+            print(f"    Warning: partial truncate failed — continuing anyway: {e}")
+
+
     # Process in batches for efficiency
     B = BATCH_SIZE
     texts = [d.page_content for d in docs]
     metas = [d.metadata for d in docs]
-    
+
     print(f"  Generating embeddings and upserting to {table}...")
-    
+
     for i in range(0, len(texts), B):
         batch_texts = texts[i:i+B]
         batch_metas = metas[i:i+B]
-        
+
         # Deduplicate within batch to avoid constraint violations
         seen_ids = set()
         unique_texts = []
         unique_metas = []
-        
+
         for j, meta in enumerate(batch_metas):
-            if meta["id"] not in seen_ids:
-                seen_ids.add(meta["id"])
+            # meta should be a dict with an "id" field
+            mid = meta.get("id") if isinstance(meta, dict) else None
+            if not mid:
+                # skip invalid metadata
+                continue
+            if mid not in seen_ids:
+                seen_ids.add(mid)
                 unique_texts.append(batch_texts[j])
                 unique_metas.append(meta)
-        
+
         if not unique_texts:
             print(f"    Batch {i//B + 1}: Skipped (all duplicates)")
             continue
-        
+
+        unique_texts = [t.replace('\x00', '') if isinstance(t, str) else t for t in unique_texts]
+        unique_metas = [sanitize_obj(m) for m in unique_metas]
+
+        # OPTIONAL: quick scan to warn for other control chars (non-printable)
+        for idx_text, t in enumerate(unique_texts):
+            if isinstance(t, str) and '\x00' in t:
+                print(f"  Warning: NUL found in batch {i//B + 1} item {idx_text}")
+
+
         # Generate embeddings for unique texts only
         embs = embedder.embed_documents(unique_texts)
-        
+
         # Prepare rows for upsert
         rows = []
         for j, emb in enumerate(embs):
             md = unique_metas[j]
+            # build canonical doc metadata if you want (you asked earlier):
+            doc_meta = {
+                "title": md.get("title") or "",
+                "category": md.get("category") or "",
+                "issued_date": md.get("issued_date") or "",
+                "year": md.get("year") or None,
+                "document_number": md.get("document_number") or "",
+                "filename": md.get("source_file") or md.get("filename") or ""
+            }
+
             rows.append({
                 "id": md["id"],
                 "content": unique_texts[j],
-                "metadata": md,
+                "metadata": {
+                    "document": doc_meta,
+                    # convenience top-level fields
+                    "title": doc_meta["title"],
+                    "category": doc_meta["category"],
+                    "issued_date": doc_meta["issued_date"],
+                    "year": doc_meta["year"],
+                    "source_file": md.get("source_file") or "",
+                    "page_start": md.get("page_start"),
+                    "page_end": md.get("page_end"),
+                    "chunk_index": md.get("chunk_index")
+                },
                 "embedding": emb
             })
-        
+
         # Upsert to Supabase (handles conflicts by replacing on PK)
         try:
             result = client.table(table).upsert(rows).execute()
@@ -229,7 +304,7 @@ def upsert_supabase(category: str, docs: list[Document], embedder, rebuild=False
         except Exception as e:
             print(f"    Batch {i//B + 1}: Error upserting: {e}")
             raise
-    
+
     return table
 
 def main():

@@ -226,7 +226,7 @@ $$;
 
 -- Function 1: Vector search with folder filter
 CREATE OR REPLACE FUNCTION match_documents_by_folder(
-  query_embedding vector(384),
+  query_embedding vector(1536),
   folder_name text,
   match_threshold float DEFAULT 0.7,
   match_count int DEFAULT 20
@@ -242,7 +242,7 @@ RETURNS TABLE (
   char_start int,
   char_end int,
   n_tokens int,
-  embedding vector(384),
+  embedding vector(1536),
   similarity float
 )
 LANGUAGE plpgsql
@@ -272,7 +272,7 @@ $$;
 
 -- Function 2: General vector search (for fallback)
 CREATE OR REPLACE FUNCTION match_documents(
-  query_embedding vector(384),
+  query_embedding vector(1536),
   match_threshold float DEFAULT 0.7,
   match_count int DEFAULT 20
 )
@@ -287,7 +287,7 @@ RETURNS TABLE (
   char_start int,
   char_end int,
   n_tokens int,
-  embedding vector(384),
+  embedding vector(1536),
   similarity float
 )
 LANGUAGE plpgsql
@@ -316,7 +316,7 @@ $$;
 
 -- Function 3: Hybrid search with text matching
 CREATE OR REPLACE FUNCTION hybrid_search_documents(
-  query_embedding vector(384),
+  query_embedding vector(1536),
   query_text text,
   folder_names text[] DEFAULT NULL,
   match_count int DEFAULT 20
@@ -332,7 +332,7 @@ RETURNS TABLE (
   char_start int,
   char_end int,
   n_tokens int,
-  embedding vector(384),
+  embedding vector(1536),
   vector_similarity float,
   text_rank float,
   hybrid_score float
