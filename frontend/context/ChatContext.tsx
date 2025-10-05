@@ -4,20 +4,12 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { ChatMessage, ChatSessionState, Citation, UploadedDoc } from '@/lib/types';
 import { getDocTypeFromFile, prefersReducedMotion, toMB } from '@/lib/utils';
 
-interface ToastState {
-  type: 'error' | 'info';
-  message: string;
-}
-
 interface ChatContextValue extends ChatSessionState {
   setActiveDocument: (id: string | null) => void;
   setActiveCategory: (category: string) => void;
   sendMessage: (text: string) => Promise<void>;
   deleteDocument: (id: string) => void;
   uploadFiles: (files: FileList | File[]) => Promise<'ok' | 'invalid' | 'failed'>;
-  toast: ToastState | null;
-  clearToast: () => void;
-  showToast: (toast: ToastState) => void;
 }
 
 
@@ -133,7 +125,6 @@ function persistActiveCategory(category: string) {
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ChatSessionState>(initialState);
-  const [toast, setToast] = useState<ToastState | null>(null);
   const progressTimers = useRef<Record<string, number>>({});
   const reducedMotionRef = useRef<boolean>(false);
 
@@ -152,9 +143,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       activeCategory: category
     });
   }, []);
-
-  const clearToast = useCallback(() => setToast(null), []);
-  const showToast = useCallback((next: ToastState) => setToast(next), []);
 
   const setActiveDocument = useCallback((id: string | null) => {
     setState((prev) => {
@@ -196,20 +184,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const updateDocumentProgress = useCallback((docId: string, progress: number) => {
-    setState((prev) => {
-      const docs = prev.documents.map((doc) =>
-        doc.id === docId
-          ? {
-              ...doc,
-              progress,
-              status: progress >= 100 ? 'uploaded' : doc.status
-            }
-          : doc
-      );
-      return { ...prev, documents: docs };
-    });
-  }, []);
 
   const stopProgressTimer = useCallback((docId: string) => {
     const timer = progressTimers.current[docId];
@@ -273,7 +247,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (error) {
         console.error('sendMessage error', error);
-        setToast({ type: 'error', message: 'Something went wrong, please try again.' });
         const fallback: ChatMessage = {
           id: crypto.randomUUID(),
           role: 'assistant',
@@ -305,7 +278,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (invalidFiles.length) {
-        setToast({ type: 'error', message: 'Invalid files detected. Check size and format requirements.' });
         return 'invalid';
       }
 
@@ -372,11 +344,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('Upload error', error);
         uploadingDocs.forEach((doc) => stopProgressTimer(doc.id));
-        setToast({ type: 'error', message: 'Upload failed. Please try again.' });
         setState((prev) => {
           const documents = prev.documents.map((doc) =>
             uploadingDocs.some((u) => u.id === doc.id)
-              ? { ...doc, status: 'failed', progress: 0 }
+              ? { ...doc, status: 'failed' as const, progress: 0 }
               : doc
           );
           persistDocuments(documents);
@@ -402,12 +373,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setActiveCategory,
       sendMessage,
       deleteDocument,
-      uploadFiles,
-      toast,
-      clearToast,
-      showToast
+      uploadFiles
     }),
-    [clearToast, deleteDocument, sendMessage, setActiveCategory, setActiveDocument, showToast, state, toast, uploadFiles]
+    [deleteDocument, sendMessage, setActiveCategory, setActiveDocument, state, uploadFiles]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

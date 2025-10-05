@@ -20,8 +20,8 @@ const config: Config = {
       },
       keyframes: {
         typingDot: {
-          '0%, 80%, 100%': { opacity: 0.2 },
-          '40%': { opacity: 1 }
+          '0%, 80%, 100%': { opacity: '0.2' },
+          '40%': { opacity: '1' }
         }
       }
     }

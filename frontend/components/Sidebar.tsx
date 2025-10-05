@@ -2,9 +2,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useOnClickOutside } from '@/hooks/useOnClickOutside';
 import { useChat } from '@/context/ChatContext';
 import { FileDropZone } from '@/components/FileDropZone';
 import { UploadedFileItem } from '@/components/UploadedFileItem';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const categories = [
   'Board & Committee Proceedings',
@@ -32,6 +34,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const dropErrorTimerRef = useRef<number | null>(null);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const handleClickOutside = useCallback(() => {
+    setCategoryDropdownOpen(false);
+  }, []);
+
+  useOnClickOutside(categoryDropdownRef, handleClickOutside);
 
   const isMobile = useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -110,75 +120,143 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <aside
       ref={panelRef}
       className={cn(
-        'sticky top-0 flex h-screen flex-col gap-6 overflow-y-auto border-r border-white/10 bg-[#12171f] px-4 py-6 text-sm text-[#e5e7eb] shadow-xl',
-        'w-full'
+        'sticky top-0 flex h-screen flex-col gap-6 overflow-y-auto border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-zinc-900 px-5 py-6 text-sm shadow-sm',
+        'w-full',
+        'scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-600'
       )}
       aria-label="Sidebar"
+      style={{
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'rgb(209 213 219) transparent'
+      }}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-900/40 text-sm font-bold text-blue-200">
-            LA
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500 text-sm font-bold text-white shadow-sm">
+              SC
+            </div>
+            <div>
+              <p className="text-base font-semibold text-gray-900 dark:text-gray-100">Shrone</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Document Assistant</p>
+            </div>
           </div>
-          <div>
-            <p className="text-base font-semibold">Shrone Chatbot</p>
-            <p className="text-xs text-[#9aa3af]">Document Assistant</p>
+          <div className="flex items-center gap-2">
+            <ThemeToggle size="sm" className="hidden lg:flex" />
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800 lg:hidden"
+              onClick={onClose}
+              aria-label="Close sidebar"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
-        <button
-          type="button"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-xs text-[#9aa3af] transition hover:border-white/30 hover:text-[#e5e7eb] lg:hidden"
-          onClick={onClose}
-          aria-label="Close sidebar"
-        >
-          ✕
-        </button>
-      </div>
 
       <div className="space-y-2">
-        <p className="text-xs uppercase tracking-widest text-[#9aa3af]">Select Category For Chat</p>
-        <div className="rounded-lg border border-white/10 bg-[#0f141a] px-3 py-2">
-          <label htmlFor="document-select" className="sr-only">
-            Select category
-          </label>
-          <select
-            id="category-select"
-            value={activeCategory}
-            onChange={(event) => setActiveCategory(event.target.value)}
-            className="w-full bg-transparent text-sm text-[#e5e7eb] outline-none"
+        <label
+          htmlFor="category-select"
+          className="text-xs font-medium text-gray-500 dark:text-gray-400"
+          id="category-label"
+        >
+          Category
+        </label>
+        <div className="relative" ref={categoryDropdownRef}>
+          {/* Selected value button */}
+          <button
+            type="button"
+            onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+            className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5 text-left text-xs text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            aria-haspopup="listbox"
+            aria-expanded={categoryDropdownOpen}
+            aria-labelledby="category-label"
           >
-            {categories.map((category) => (
-              <option key={category} value={category} className="bg-[#0f141a] text-[#e5e7eb]">
-                {category}
-              </option>
-            ))}
-          </select>
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate" title={activeCategory}>{activeCategory}</span>
+              <svg 
+                className={cn(
+                  'h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0 transition-transform duration-200',
+                  categoryDropdownOpen && 'rotate-180'
+                )}
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Dropdown menu */}
+          {categoryDropdownOpen && (
+            <div 
+              className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg max-h-60 overflow-auto animate-in fade-in slide-in-from-top-2 duration-200"
+              role="listbox"
+              aria-labelledby="category-label"
+            >
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setActiveCategory(category);
+                    setCategoryDropdownOpen(false);
+                  }}
+                  className={cn(
+                    'w-full px-3 py-2.5 text-left text-xs transition-colors',
+                    category === activeCategory
+                      ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-medium'
+                      : 'text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  )}
+                  role="option"
+                  aria-selected={category === activeCategory}
+                >
+                  <span className="block truncate" title={category}>{category}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <span id="category-help" className="sr-only">
+            Select a document category to filter conversations
+          </span>
         </div>
       </div>
 
       <div className="space-y-3">
-        <p className="text-xs uppercase tracking-widest text-[#9aa3af]">Document Management</p>
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Upload Document</p>
         <FileDropZone onFiles={handleFiles} error={Boolean(dropError)} />
-        {dropError && <p className="text-xs text-red-400">{dropError}</p>}
+        {dropError && <p className="text-xs text-red-500 dark:text-red-400">{dropError}</p>}
       </div>
 
-      <div className="space-y-3">
-        <p className="text-xs uppercase tracking-widest text-[#9aa3af]">Uploaded Documents</p>
-        <div className="space-y-3">
-          {documents.map((doc) => (
-            <UploadedFileItem
-              key={doc.id}
-              doc={doc}
-              onDelete={deleteDocument}
-              onSelect={setActiveDocument}
-              isActive={doc.id === activeDocumentId}
-            />
-          ))}
-          {documents.length === 0 && (
-            <p className="text-xs text-[#9aa3af]">No documents uploaded yet.</p>
+      <nav className="flex-1 space-y-3 overflow-hidden" aria-label="Document list">
+        <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400" id="documents-heading">
+          Documents ({documents.length})
+        </h3>
+        <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-480px)] pr-1">
+          {documents.length > 0 ? (
+            <ul role="list" aria-labelledby="documents-heading" className="space-y-2">
+              {documents.map((doc) => (
+                <li key={doc.id}>
+                  <UploadedFileItem
+                    doc={doc}
+                    onDelete={deleteDocument}
+                    onSelect={setActiveDocument}
+                    isActive={doc.id === activeDocumentId}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-center py-8" role="status" aria-live="polite">
+              <p className="text-sm text-gray-400 dark:text-gray-500">No documents yet</p>
+              <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">Upload files to get started</p>
+            </div>
           )}
         </div>
-      </div>
+      </nav>
     </aside>
   );
 

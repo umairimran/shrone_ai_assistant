@@ -6,30 +6,12 @@ import { ChatHeader } from '@/components/ChatHeader';
 import { DocumentTag } from '@/components/DocumentTag';
 import { MessageList } from '@/components/MessageList';
 import { ChatInput } from '@/components/ChatInput';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { DocumentViewerIntegration } from '@/components/DocumentViewerIntegration';
 import { ChatProvider, useChat } from '@/context/ChatContext';
+import { DocumentViewerProvider } from '@/context/DocumentViewerContext';
 
-function ToastBanner() {
-  const { toast, clearToast } = useChat();
-
-  if (!toast) return null;
-  return (
-    <div className="fixed bottom-6 left-1/2 z-50 w-[90%] max-w-md -translate-x-1/2 rounded-xl border border-white/10 bg-[#151a21] px-4 py-3 text-sm text-[#e5e7eb] shadow-lg">
-      <div className="flex items-start justify-between gap-4">
-        <span>{toast.message}</span>
-        <button
-          type="button"
-          onClick={clearToast}
-          className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-[#9aa3af] transition hover:border-white/40 hover:text-[#e5e7eb]"
-          aria-label="Dismiss notification"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function ChatPageContent() {
+function ChatPageContent() {
   const { documents, activeDocumentId, messages, isAssistantTyping, activeCategory } = useChat();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -39,21 +21,23 @@ export function ChatPageContent() {
   }, [activeDocumentId, documents]);
 
   return (
-    <div className="relative min-h-screen bg-[#0b0f13] text-[#e5e7eb]">
+    <div className="relative min-h-screen bg-white dark:bg-zinc-900">
       <div className="min-h-screen lg:grid lg:grid-cols-[300px_1fr]">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="flex min-h-screen flex-col">
-          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-white/5 bg-[#0b0f13]/95 px-4 py-4 backdrop-blur lg:hidden">
+          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-zinc-900/95 px-4 py-4 backdrop-blur lg:hidden">
             <button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-lg text-[#e5e7eb]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
               onClick={() => setSidebarOpen(true)}
               aria-label="Open sidebar"
             >
-              ☰
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
-            <span className="text-sm font-semibold text-[#9aa3af]">Shrone Chatbot</span>
-            <div className="h-9 w-9" aria-hidden />
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Shrone</span>
+            <ThemeToggle size="sm" />
           </div>
           <main className="flex h-full flex-1 flex-col">
             <section className="flex flex-1 flex-col px-4 pb-4 pt-6 sm:px-8">
@@ -67,15 +51,17 @@ export function ChatPageContent() {
           </main>
         </div>
       </div>
-      <ToastBanner />
     </div>
   );
 }
 
 export default function ChatPage() {
   return (
-    <ChatProvider>
-      <ChatPageContent />
-    </ChatProvider>
+    <DocumentViewerProvider>
+      <ChatProvider>
+        <ChatPageContent />
+        <DocumentViewerIntegration />
+      </ChatProvider>
+    </DocumentViewerProvider>
   );
 }

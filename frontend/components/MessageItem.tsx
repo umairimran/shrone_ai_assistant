@@ -1,21 +1,17 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { ChatMessage, Citation } from '@/lib/types';
 import { cn, formatTime } from '@/lib/utils';
+import { AnswerContent, useCitationInteractions, ProcessingStatusIndicator } from '@/components/AnswerContent';
+import { useRouter } from 'next/navigation';
+import { trackCitationClick, trackCitationHighlight } from '@/services/TelemetryService';
+import { CitationsList } from '@/components/CitationCard';
 
 interface MessageItemProps {
   message: ChatMessage;
 }
 
-const normalizeValue = (value?: string | null) => {
-  if (!value) return null;
-  const trimmed = `${value}`.replace(/\s+/g, ' ').trim();
-  if (!trimmed || /^none(?:–none)?$/i.test(trimmed)) {
-    return null;
-  }
-  return trimmed;
-};
 
 type AnswerBlock =
   | { kind: 'paragraph'; text: string }
@@ -147,139 +143,218 @@ function parseAnswerContent(content: string): AnswerBlock[] {
   return blocks;
 }
 
-function formatCitation(citation: Citation): string {
-  const scopedDoc = (typeof citation.document === 'object' && citation.document) || {};
-
-  const title =
-    normalizeValue(citation.title) ?? normalizeValue(scopedDoc.title) ?? 'Untitled source';
-  const category = normalizeValue(citation.category) ?? normalizeValue(scopedDoc.category);
-  const section = normalizeValue(citation.section) ?? normalizeValue(scopedDoc.section);
-  const yearValue = normalizeValue(citation.year) ?? normalizeValue(scopedDoc.year);
-  const pages = normalizeValue(citation.pages) ?? normalizeValue(scopedDoc.pages);
-  const heading = normalizeValue(citation.heading_path) ?? normalizeValue(scopedDoc.heading_path);
-
-  const formattedSection = section
-    ? section.match(/^section/i)
-      ? section
-      : `Section ${section}`
-    : null;
-
-  const formattedYear = yearValue ? `${yearValue}` : null;
-
-  const parts = [title];
-
-  if (category) parts.push(category);
-  if (formattedSection) parts.push(formattedSection);
-  if (formattedYear) parts.push(formattedYear);
-  if (pages) parts.push(pages.toLowerCase().startsWith('p.') ? pages : `p.${pages}`);
-  if (heading) parts.push(heading);
-
-  return parts.filter(Boolean).join(' · ');
-}
 
 export function MessageItem({ message }: MessageItemProps) {
   const isUser = message.role === 'user';
   const [displayTime, setDisplayTime] = useState('');
-  const answerBlocks = useMemo(() => parseAnswerContent(message.content), [message.content]);
+  const [highlightedCitationIndex, setHighlightedCitationIndex] = useState<number | undefined>();
+  const { scrollToCitation } = useCitationInteractions();
+  const router = useRouter();
+  
+  // Use HTML content if available, otherwise fall back to parsed content
+  const hasHtmlContent = !isUser && message.answer_html;
+  const answerBlocks = useMemo(() => 
+    !hasHtmlContent ? parseAnswerContent(message.content) : [], 
+    [message.content, hasHtmlContent]
+  );
 
   useEffect(() => {
     setDisplayTime(formatTime(message.createdAt));
   }, [message.createdAt]);
 
+  // Handle URL fragment navigation to citations
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#cite-c')) {
+        const citationId = hash.replace('#cite-c', '');
+        const index = parseInt(citationId, 10) - 1;
+        if (index >= 0 && message.citations && index < message.citations.length) {
+          const citation = message.citations[index];
+          
+          setHighlightedCitationIndex(index);
+          scrollToCitation(citationId);
+          
+          // Track deep link citation highlight
+          trackCitationHighlight(
+            citation.id || citationId,
+            index,
+            citation.doc_title
+          );
+          
+          // Clear highlight after 5 seconds for deep links
+          setTimeout(() => {
+            setHighlightedCitationIndex(undefined);
+          }, 5000);
+        }
+      }
+    };
+
+    // Handle initial hash on mount
+    handleHashChange();
+    
+    // Listen for hash changes
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [message.citations, scrollToCitation]);
+
+  const handleCitationClick = useCallback((citationId: string) => {
+    const index = parseInt(citationId, 10) - 1;
+    if (index >= 0 && message.citations && index < message.citations.length) {
+      const citation = message.citations[index];
+      
+      setHighlightedCitationIndex(index);
+      scrollToCitation(citationId);
+      
+      // Track citation click event
+      trackCitationClick(
+        citation.id || citationId,
+        index,
+        citation.doc_title,
+        citation.confidence_score
+      );
+      
+      // Track citation highlight event
+      trackCitationHighlight(
+        citation.id || citationId,
+        index,
+        citation.doc_title
+      );
+      
+      // Update URL fragment for deep linking
+      const newUrl = `${window.location.pathname}${window.location.search}#cite-c${citationId}`;
+      window.history.replaceState(null, '', newUrl);
+      
+      // Clear highlight after 3 seconds
+      setTimeout(() => {
+        setHighlightedCitationIndex(undefined);
+      }, 3000);
+    }
+  }, [message.citations, scrollToCitation]);
+
+  const handleViewDocument = (citation: Citation) => {
+    // This will be implemented when we add the document viewer
+    console.log('View document:', citation);
+  };
+
   return (
-    <div className={cn('flex items-start gap-3', isUser ? 'flex-row-reverse sm:flex-row' : '')}>
-      <span
-        aria-hidden
+    <article 
+      className={cn('flex items-start gap-3 sm:gap-4 animate-slide-in', isUser ? 'flex-row-reverse sm:flex-row' : '')}
+      aria-label={`${isUser ? 'Your' : 'Assistant'} message from ${formatTime(message.createdAt)}`}
+    >
+      <div
+        role="img"
+        aria-label={isUser ? 'Your avatar' : 'Assistant avatar'}
         className={cn(
-          'flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-black/80 shadow-md',
-          isUser ? 'bg-red-500/80' : 'bg-yellow-400/80'
+          'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold shrink-0',
+          isUser 
+            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+            : 'bg-blue-500 text-white'
         )}
       >
-        {isUser ? 'U' : 'A'}
-      </span>
-      <div className={cn('max-w-[85%] text-sm sm:max-w-2xl', isUser ? 'text-right sm:text-left' : 'text-left')}>
+        {isUser ? 'Y' : 'AI'}
+      </div>
+      <div className={cn('flex-1 min-w-0 max-w-[85%] sm:max-w-2xl', isUser ? 'text-right sm:text-left' : 'text-left')}>
         <div
           className={cn(
-            'rounded-2xl border border-white/5 px-4 py-3 shadow-sm',
-            isUser ? 'bg-[#0f1216]' : 'bg-[#101318]'
+            'group relative rounded-xl px-4 py-3 border transition-colors',
+            isUser 
+              ? 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+              : 'bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
           )}
+          role="region"
+          aria-label="Message content"
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap leading-7 text-[#e5e7eb]">{message.content}</p>
+            <p className="whitespace-pre-wrap leading-relaxed text-gray-900 dark:text-gray-100">{message.content}</p>
           ) : (
             <div className="space-y-4">
               <div className="space-y-2">
-                <h3 className="text-base font-semibold text-[#f3f4f6]">Answer</h3>
-                <div className="space-y-2 text-sm leading-7 text-[#e5e7eb]">
-                  {answerBlocks.length === 0 && (
-                    <p className="whitespace-pre-wrap">No answer available.</p>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Answer</h3>
+                  {message.processingStatus && (
+                    <ProcessingStatusIndicator 
+                      status={message.processingStatus} 
+                      details={message.processingDetails}
+                    />
                   )}
-                  {answerBlocks.map((block, index) => {
-                    if (block.kind === 'paragraph') {
-                      return (
-                        <p key={`paragraph-${index}`} className="whitespace-pre-wrap">
-                          {block.text}
-                        </p>
-                      );
-                    }
+                </div>
+                
+                {/* Render HTML content or fallback to parsed blocks */}
+                {hasHtmlContent ? (
+                  <AnswerContent 
+                    html={message.answer_html!} 
+                    onCitationClick={handleCitationClick}
+                    className="text-gray-900 dark:text-gray-100"
+                  />
+                ) : (
+                  <div className="space-y-2 text-sm leading-relaxed text-gray-900 dark:text-gray-100">
+                    {answerBlocks.length === 0 && (
+                      <p className="whitespace-pre-wrap">No answer available.</p>
+                    )}
+                    {answerBlocks.map((block, index) => {
+                      if (block.kind === 'paragraph') {
+                        return (
+                          <p key={`paragraph-${index}`} className="whitespace-pre-wrap">
+                            {block.text}
+                          </p>
+                        );
+                      }
 
-                    if (block.kind === 'unordered-list') {
+                      if (block.kind === 'unordered-list') {
+                        return (
+                          <ul
+                            key={`unordered-${index}`}
+                            className="ml-5 list-disc space-y-1 whitespace-normal text-gray-900 dark:text-gray-100"
+                          >
+                            {block.items.map((item, itemIndex) => (
+                              <li key={`unordered-${index}-${itemIndex}`}>{item}</li>
+                            ))}
+                          </ul>
+                        );
+                      }
+
+                      const listStyleType =
+                        block.listStyle === 'lower-alpha'
+                          ? 'lower-alpha'
+                          : block.listStyle === 'upper-alpha'
+                            ? 'upper-alpha'
+                            : 'decimal';
+
                       return (
-                        <ul
-                          key={`unordered-${index}`}
-                          className="ml-5 list-disc space-y-1 whitespace-normal text-[#e5e7eb]"
+                        <ol
+                          key={`ordered-${index}`}
+                          className="ml-5 space-y-1 whitespace-normal text-gray-900 dark:text-gray-100"
+                          style={{ listStyleType }}
+                          start={block.start}
                         >
                           {block.items.map((item, itemIndex) => (
-                            <li key={`unordered-${index}-${itemIndex}`}>{item}</li>
+                            <li key={`ordered-${index}-${itemIndex}`}>{item}</li>
                           ))}
-                        </ul>
+                        </ol>
                       );
-                    }
-
-                    const listStyleType =
-                      block.listStyle === 'lower-alpha'
-                        ? 'lower-alpha'
-                        : block.listStyle === 'upper-alpha'
-                          ? 'upper-alpha'
-                          : 'decimal';
-
-                    return (
-                      <ol
-                        key={`ordered-${index}`}
-                        className="ml-5 space-y-1 whitespace-normal text-[#e5e7eb]"
-                        style={{ listStyleType }}
-                        start={block.start}
-                      >
-                        {block.items.map((item, itemIndex) => (
-                          <li key={`ordered-${index}-${itemIndex}`}>{item}</li>
-                        ))}
-                      </ol>
-                    );
-                  })}
-                </div>
+                    })}
+                  </div>
+                )}
               </div>
-              {message.citations && message.citations.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-widest text-[#9aa3af]">
-                    Citations
-                  </h4>
-                  <ul className="mt-2 space-y-1 text-sm">
-                    {message.citations.map((citation, index) => (
-                      <li key={`${citation.title}-${index}`} className="text-blue-400">
-                        <span className="font-medium">[{index + 1}]</span>&nbsp;
-                        {formatCitation(citation)}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              
+              {/* Enhanced Citations Display */}
+              <CitationsList 
+                citations={message.citations || []}
+                onViewDocument={handleViewDocument}
+                highlightedIndex={highlightedCitationIndex}
+              />
             </div>
           )}
         </div>
-        <p className="mt-2 text-xs uppercase tracking-wide text-white/40">
-          {displayTime || ' '}
-        </p>
+        <time 
+          dateTime={message.createdAt}
+          className="mt-2 text-xs tracking-wide text-gray-500 dark:text-gray-500 block"
+          aria-label={`Sent at ${formatTime(message.createdAt)}`}
+        >
+          {displayTime || ' '}
+        </time>
       </div>
-    </div>
+    </article>
   );
 }

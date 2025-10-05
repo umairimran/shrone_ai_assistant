@@ -1,14 +1,9 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { ChatProvider } from '@/context/ChatContext';
-import { ChatPageContent } from '@/app/chat/page';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import ChatPage from '../app/chat/page';
 
 const renderChat = () =>
-  render(
-    <ChatProvider>
-      <ChatPageContent />
-    </ChatProvider>
-  );
+  render(<ChatPage />);
 
 declare const global: typeof globalThis & { fetch: jest.Mock };
 

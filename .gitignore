@@ -240,3 +240,6 @@ credentials.json
 *.spc
 
 # === END SECURITY ===
+
+Frontend.md
+WARP.md

@@ -14,11 +14,27 @@ export default [
   js.configs.recommended,
   prettier,
   {
-    files: ['**/*.{ts,tsx,js,jsx}'],
+    files: ['**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
         project: './tsconfig.json'
+      },
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        navigator: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        fetch: 'readonly',
+        crypto: 'readonly',
+        btoa: 'readonly',
+        atob: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        console: 'readonly'
       }
     },
     plugins: {
@@ -27,11 +43,76 @@ export default [
     },
     rules: {
       ...nextRules,
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
+      '@typescript-eslint/no-unused-vars': ['error', { 
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+        args: 'after-used'
+      }],
+      'no-unused-vars': ['error', { 
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+        ignoreRestSiblings: true
+      }],
+      'no-undef': 'error'
+    }
+  },
+  {
+    files: ['**/*.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        navigator: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        fetch: 'readonly',
+        crypto: 'readonly',
+        btoa: 'readonly',
+        atob: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        console: 'readonly'
+      }
+    },
+    rules: {
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-undef': 'error'
     }
   },
   {
     files: ['__tests__/**/*.{ts,tsx}'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        jest: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
+        navigator: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        fetch: 'readonly',
+        crypto: 'readonly',
+        btoa: 'readonly',
+        atob: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        console: 'readonly'
+      }
+    },
     plugins: {
       'testing-library': testingLibrary
     },
@@ -40,6 +121,25 @@ export default [
     }
   },
   {
-    ignores: ['node_modules/**/*', '.next/**/*']
+    files: ['jest.setup.ts'],
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        crypto: 'readonly',
+        global: 'readonly'
+      }
+    }
+  },
+  {
+    ignores: [
+      'node_modules/**/*', 
+      '.next/**/*',
+      'eslint.config.js',
+      'postcss.config.js',
+      'tailwind.config.js',
+      'next.config.js',
+      'jest.config.js'
+    ]
   }
 ];

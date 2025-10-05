@@ -1,22 +1,28 @@
+import React from 'react';
 import type { Metadata } from 'next';
-import './globals.css';
 import { Inter } from 'next/font/google';
+import './globals.css';
+import { ThemeProvider } from '@/context/ThemeContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Shrone Chatbot',
-  description: 'Shrone chatbot for document-aware assistance'
+  title: 'Shrone Chatbot - Document Assistant',
+  description: 'AI-powered chatbot for document analysis with intelligent citations and insights',
 };
 
 export default function RootLayout({
-  children
+  children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-[#0b0f13] text-[#e5e7eb]`}>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
-  );
+  )
 }
