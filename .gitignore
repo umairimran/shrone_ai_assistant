@@ -35,6 +35,7 @@ venv.bak/
 .env.local
 .env.*.local
 .env.new
+.env.production
 
 # IDEs
 .vscode/
@@ -112,3 +113,130 @@ transformers_cache/
 
 # Supabase local
 .supabase/
+
+# === FRONTEND (Next.js/React) ===
+# Note: frontend/ also has its own .gitignore
+
+# Dependencies
+frontend/node_modules/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+.next/
+out/
+
+# Next.js cache
+frontend/.swc/
+.swc/
+
+# Production builds
+frontend/build/
+frontend/dist/
+build/
+dist/
+
+# Testing
+frontend/coverage/
+coverage/
+.nyc_output
+.jest/
+
+# Storybook build outputs
+storybook-static/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Miscellaneous
+.DS_Store
+*.pem
+.eslintcache
+
+# PWA files
+**/public/sw.js
+**/public/workbox-*.js
+**/public/worker-*.js
+**/public/sw.js.map
+**/public/workbox-*.js.map
+**/public/worker-*.js.map
+
+# Vercel
+.vercel
+
+# Turbo
+.turbo
+
+# Package manager lock files (keep package-lock.json but ignore others if using different managers)
+# Uncomment the one you're NOT using:
+# frontend/package-lock.json
+# frontend/yarn.lock
+# frontend/pnpm-lock.yaml
+
+# Local .env files (already covered above but being explicit for frontend)
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# React DevTools
+.react-devtools
+
+# IDE specific for frontend
+frontend/.vscode/
+frontend/.idea/
+
+# === END FRONTEND ===
+
+# === DEVELOPMENT & TESTING ===
+# Test artifacts
+test-results/
+playwright-report/
+test-results.xml
+coverage.xml
+
+# Development databases
+*.dev.db
+dev.sqlite
+
+# Temporary development files
+scratch/
+temp/
+playground/
+experiments/
+
+# Editor backup files
+*~
+*.orig
+*.rej
+.#*
+
+# === END DEVELOPMENT ===
+
+# === SECURITY & SECRETS ===
+# API Keys and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+.secrets
+api-keys.json
+credentials.json
+
+# SSL certificates
+*.crt
+*.cert
+*.cer
+*.p7b
+*.p7s
+*.spc
+
+# === END SECURITY ===
