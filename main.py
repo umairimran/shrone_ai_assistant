@@ -1501,7 +1501,9 @@ async def ask_question(req: AskRequest):
     sections_found = re.findall(r"Section\s+[A-Za-z0-9\.\- ,]+", ans, flags=re.IGNORECASE)
 
     cites = []
-    for idx, d in enumerate(docs[:2]):
+    seen_documents = set()  # Track (title, category) pairs to avoid duplicates
+    
+    for idx, d in enumerate(docs[:5]):  # Check more docs but deduplicate
         m_raw = d.metadata
         m = safe_load_meta(m_raw)
 
@@ -1512,6 +1514,15 @@ async def ask_question(req: AskRequest):
 
         title = doc_obj.get("title") or m.get("title") or m.get("doc_title") or ""
         category = doc_obj.get("category") or m.get("category") or m.get("folder") or ""
+        
+        # Create unique identifier for this document
+        doc_key = (title.strip(), category.strip())
+        
+        # Skip if we've already seen this document
+        if doc_key in seen_documents:
+            continue
+            
+        seen_documents.add(doc_key)
         year = doc_obj.get("year") or m.get("year") or None
 
         # Try many keys for section / heading (IMPROVED to produce full friendly text)
@@ -1604,6 +1615,10 @@ async def ask_question(req: AskRequest):
             }
         }
         cites.append(citation_entry)
+        
+        # Limit to maximum 3 unique citations
+        if len(cites) >= 3:
+            break
 
     # Return cleaned answer (no citations inside text) and structured citation objects
     return AskResponse(answer=ans_clean, citations=cites)
