@@ -173,11 +173,6 @@ next-env.d.ts
 # Turbo
 .turbo
 
-# Package manager lock files (keep package-lock.json but ignore others if using different managers)
-# Uncomment the one you're NOT using:
-# frontend/package-lock.json
-# frontend/yarn.lock
-# frontend/pnpm-lock.yaml
 
 # Local .env files (already covered above but being explicit for frontend)
 frontend/.env
