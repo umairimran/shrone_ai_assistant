@@ -1458,22 +1458,27 @@ async def ask_question(req: AskRequest):
 
     docs = all_docs # send top k to LLM
 
-    # Build context and call LLM (unchanged)
+    # Call LLM and get raw content
     ctx = format_context(docs)
     chain = PROMPT | LLM
-    ans = chain.invoke({
+    raw_resp = chain.invoke({
         "category": category,
         "question": req.question,
         "context": ctx
-    }).content
+    })
+    ans = raw_resp.content if hasattr(raw_resp, "content") else str(raw_resp)
 
-    # Helper to read many possible metadata keys safely
-    def meta_get(m: dict, *keys, default=""):
-        for key in keys:
-            if key in m and m[key] not in (None, ""):
-                return m[key]
-        return default
-    
+    # --- CLEAN answer: remove any appended "Citations:" list the model may have added ---
+    # Remove a trailing "Citations:" block (numbered lines)
+    ans_clean = re.sub(r"\n\nCitations:\n(?:\d+\..*(?:\n|$))+","", ans)
+
+    # Remove inline parenthetical citations that contain 'Section' (e.g., "(...; p.20–20; Section 5)")
+    ans_clean = re.sub(r"\s*\([^)]*;\s*p\.\d{1,4}(?:–\d{1,4})?;?\s*Section[^)]*\)", "", ans_clean, flags=re.IGNORECASE)
+
+    # Trim whitespace
+    ans_clean = ans_clean.strip()
+
+    # Helper to safely load metadata
     def safe_load_meta(raw_meta):
         if raw_meta is None:
             return {}
@@ -1489,47 +1494,120 @@ async def ask_question(req: AskRequest):
         except Exception:
             return {}
 
-    def first_n_text(text, n=240):
-        if not text:
-            return ""
-        t = text.strip().replace("\n", " ")
-        return t[:n] + ("…" if len(t) > n else "")
+    # --- Build citations array from metadata, with fallbacks ---
+    # Try to extract Section/page info from the original model text as a fallback
+    # find list of "p.X–Y" and "Section ..." occurrences
+    pages_found = re.findall(r"p\.\d{1,4}(?:–\d{1,4})?", ans, flags=re.IGNORECASE)
+    sections_found = re.findall(r"Section\s+[A-Za-z0-9\.\- ,]+", ans, flags=re.IGNORECASE)
 
-    # Build rich citations
     cites = []
-    for d in docs[:5]:
+    for idx, d in enumerate(docs[:2]):
         m_raw = d.metadata
         m = safe_load_meta(m_raw)
 
-        # First look for nested 'document' object
+        # nested document object fallback
         doc_obj = m.get("document") if isinstance(m, dict) else None
         if not isinstance(doc_obj, dict):
             doc_obj = {}
 
-        # Extract fields with fallbacks
         title = doc_obj.get("title") or m.get("title") or m.get("doc_title") or ""
         category = doc_obj.get("category") or m.get("category") or m.get("folder") or ""
-        issued_date = doc_obj.get("issued_date") or doc_obj.get("date") or m.get("issued_date") or m.get("date") or ""
         year = doc_obj.get("year") or m.get("year") or None
 
-        # Create citation_text from chunk text (short excerpt)
-        citation_text = first_n_text(d.page_content or "")
+        # Try many keys for section / heading (IMPROVED to produce full friendly text)
+        section = ""
+        # 1) Direct metadata fields
+        for key in ("section", "section_title", "heading", "heading_title", "title_path", "section_name", "section_desc"):
+            if m.get(key):
+                section = str(m.get(key)).strip()
+                break
 
-        # Build the exact structure you requested
+        # 2) If heading_path present, try to format it into a friendly string
+        if not section:
+            heading_path = m.get("heading_path") or []
+            if isinstance(heading_path, list) and heading_path:
+                try:
+                    # If looks like ["Article XV","Section 5","Exclusion..."], build full phrase
+                    if len(heading_path) >= 3:
+                        # join first two with comma, rest joined as descriptive text after an em-dash
+                        main = f"{heading_path[0].strip()}, {heading_path[1].strip()}"
+                        desc = " — ".join([str(h).strip() for h in heading_path[2:] if h])
+                        section = f"{main} — {desc}" if desc else main
+                    elif len(heading_path) == 2:
+                        section = f"{heading_path[0].strip()}, {heading_path[1].strip()}"
+                    else:
+                        section = str(heading_path[0]).strip()
+                except Exception:
+                    section = " > ".join([str(h).strip() for h in heading_path])
+
+        # 3) Fallback: try to extract Article/Section and following descriptive phrase from the LLM text
+        if not section:
+            # Look for 'Article ...' (Roman numerals) and 'Section X' and optional description after dash/colon
+            art_match = re.search(r"(Article\s+[IVXLCDM]+)", ans, flags=re.IGNORECASE)
+            sec_match = re.search(r"(Section\s+[A-Za-z0-9\.\-]+)(?:\s*[:\-–—]\s*([^;\n]+))?", ans, flags=re.IGNORECASE)
+            desc_match = None
+            if sec_match:
+                sec_part = sec_match.group(1).strip()
+                desc_part = sec_match.group(2).strip() if sec_match.group(2) else ""
+                # Use Article if found
+                if art_match:
+                    article_part = art_match.group(1).strip()
+                    if desc_part:
+                        section = f"{article_part}, {sec_part} — {desc_part}"
+                    else:
+                        section = f"{article_part}, {sec_part}"
+                else:
+                    # No article found, but we have section
+                    if desc_part:
+                        section = f"{sec_part} — {desc_part}"
+                    else:
+                        section = sec_part
+            else:
+                # Try alternative pattern: "Article ... — <desc>"
+                alt_match = re.search(r"(Article\s+[IVXLCDM]+)\s*[:\-–—]\s*([^;\n]+)", ans, flags=re.IGNORECASE)
+                if alt_match:
+                    section = f"{alt_match.group(1).strip()} — {alt_match.group(2).strip()}"
+
+        # Final cleanup: ensure no excessive whitespace
+        section = section.strip() if section else ""
+
+        # Page-range fallback from metadata
+        page_range = m.get("page_range") or ""
+        if not page_range:
+            ps = m.get("page_start")
+            pe = m.get("page_end")
+            if ps is not None and pe is not None:
+                try:
+                    page_range = f"p.{ps}" if str(ps) == str(pe) else f"p.{ps}–{pe}"
+                except Exception:
+                    page_range = ""
+
+        # If section still empty, use the next found section from model text (if any)
+        if not section and idx < len(sections_found):
+            section = sections_found[idx].strip()
+
+        # If page_range empty, use the next found pages from model text (if any)
+        if not page_range and idx < len(pages_found):
+            page_range = pages_found[idx].strip()
+
+        # Normalize empty strings to explicit empty
+        section = section.strip() if section else ""
+        page_range = page_range.strip() if page_range else ""
+
         citation_entry = {
             "document": {
                 "title": title,
                 "category": category,
-                "issued_date": issued_date,
-                "year": year,
-                "citation_text": citation_text
-            },
+                "section": section,
+                #"page_range": page_range,
+                "year": year
+            }
         }
-
         cites.append(citation_entry)
 
-    # return as before
-    return AskResponse(answer=ans, citations=cites)
+    # Return cleaned answer (no citations inside text) and structured citation objects
+    return AskResponse(answer=ans_clean, citations=cites)
+
 
 
 @app.get("/v1/qa-status")
