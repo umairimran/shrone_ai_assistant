@@ -19,6 +19,7 @@ load_dotenv()
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 
@@ -463,6 +464,275 @@ def save_preprocess_json(data: Dict, filename: str) -> str:
     
     return str(out_path)
 
+
+async def generate_and_store_embeddings(processed_data: dict, category: str) -> dict:
+    """
+    Generate embeddings for processed document chunks and store them in Supabase.
+    
+    Args:
+        processed_data: The preprocessed document data with chunks
+        category: Document category for table routing
+        
+    Returns:
+        dict: Status and results of embedding generation
+    """
+    try:
+        # Import required modules
+        from langchain_core.documents import Document
+        from langchain_openai import OpenAIEmbeddings
+        from supabase import create_client
+        from embeddings_config import CATEGORY_MAP, SUPABASE_TABLE_BY_CATEGORY, OPENAI_EMBED_MODEL
+        
+        print(f"🔄 Starting embedding generation for category: {category}")
+        
+        # Initialize embeddings
+        embedder = OpenAIEmbeddings(model=OPENAI_EMBED_MODEL)
+        
+        # Get Supabase client
+        supabase_url = os.environ.get("SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY/SUPABASE_KEY")
+            
+        client = create_client(supabase_url, supabase_key)
+        
+        # Map category to table
+        normalized_category = CATEGORY_MAP.get(category, category)
+        table_name = SUPABASE_TABLE_BY_CATEGORY.get(normalized_category)
+        
+        if not table_name:
+            raise ValueError(f"No table mapping found for category: {category}")
+            
+        print(f"📊 Using table: {table_name} for category: {normalized_category}")
+        
+        # Process chunks into Documents
+        documents = []
+        chunks = processed_data.get("chunks", [])
+        doc_info = processed_data.get("document", {})
+        
+        # Generate source_file path if not provided
+        source_file_path = processed_data.get("saved_path")
+        if not source_file_path:
+            # Generate a source file path based on document info
+            title = doc_info.get("title", "document")
+            category = doc_info.get("category", "Uncategorized")
+            category_slug = category.replace(" ", "_").replace("&", "and").replace("  ", "_")
+            title_slug = title.replace(" ", "_")
+            source_file_path = f"processed_output/{category_slug}/{title_slug}.json"
+        
+        for chunk in chunks:
+            # Generate unique chunk ID
+            chunk_text = chunk.get("text", "")
+            chunk_id = hashlib.sha256(chunk_text.encode()).hexdigest()
+            
+            # Prepare metadata
+            metadata = {
+                "id": chunk_id,
+                "title": doc_info.get("title", ""),
+                "category": category,
+                "issued_date": doc_info.get("issued_date", ""),
+                "year": doc_info.get("year"),
+                "document_number": doc_info.get("document_number", ""),
+                "page_start": chunk.get("page_start"),
+                "page_end": chunk.get("page_end"),
+                "heading_path": " > ".join(chunk.get("heading_path") or []),
+                "chunk_index": chunk.get("chunk_index"),
+                "source_file": source_file_path,
+                "doc_version": 1,
+                "is_current": True
+            }
+            
+            # Create Document
+            doc = Document(page_content=chunk_text, metadata=metadata)
+            documents.append(doc)
+            
+        if not documents:
+            return {"status": "warning", "message": "No chunks to embed"}
+            
+        print(f"📝 Processing {len(documents)} chunks")
+        
+        # Generate embeddings in batches
+        batch_size = 10  # Smaller batches for safety
+        total_inserted = 0
+        
+        for i in range(0, len(documents), batch_size):
+            batch_docs = documents[i:i+batch_size]
+            batch_texts = [doc.page_content for doc in batch_docs]
+            batch_metas = [doc.metadata for doc in batch_docs]
+            
+            print(f"🔄 Processing batch {i//batch_size + 1}/{(len(documents) + batch_size - 1)//batch_size}")
+            
+            # Generate embeddings
+            embeddings = embedder.embed_documents(batch_texts)
+            
+            # Prepare rows for upsert
+            rows = []
+            for j, embedding in enumerate(embeddings):
+                meta = batch_metas[j]
+                
+                # Clean text (remove any null characters)
+                clean_text = batch_texts[j].replace('\x00', '')
+                
+                # Build document metadata
+                doc_meta = {
+                    "title": meta.get("title", ""),
+                    "category": meta.get("category", ""),
+                    "issued_date": meta.get("issued_date", ""),
+                    "year": meta.get("year"),
+                    "document_number": meta.get("document_number", ""),
+                    "filename": meta.get("source_file", "")
+                }
+                
+                row = {
+                    "id": meta["id"],
+                    "content": clean_text,
+                    "metadata": {
+                        "document": doc_meta,
+                        "chunk": {
+                            "page_start": meta.get("page_start"),
+                            "page_end": meta.get("page_end"),
+                            "heading_path": meta.get("heading_path", ""),
+                            "chunk_index": meta.get("chunk_index"),
+                            "token_count": len(clean_text.split())  # Rough estimate
+                        },
+                        "source_file": meta.get("source_file", ""),
+                        "title": meta.get("title", ""),
+                        "category": meta.get("category", ""),
+                        "issued_date": meta.get("issued_date", ""),
+                        "year": meta.get("year"),
+                        "document_number": meta.get("document_number", "")
+                    },
+                    "embedding": embedding
+                }
+                rows.append(row)
+            
+            # Upsert to Supabase
+            try:
+                result = client.table(table_name).upsert(rows).execute()
+                total_inserted += len(rows)
+                print(f"✅ Uploaded batch {i//batch_size + 1}: {len(rows)} chunks")
+            except Exception as e:
+                print(f"❌ Error uploading batch {i//batch_size + 1}: {str(e)}")
+                raise
+                
+        print(f"🎉 Successfully embedded and stored {total_inserted} chunks in {table_name}")
+        
+        return {
+            "status": "success",
+            "chunks_processed": len(documents),
+            "chunks_stored": total_inserted,
+            "table": table_name,
+            "category": normalized_category
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in embedding generation: {str(e)}")
+        return {
+            "status": "error", 
+            "message": str(e),
+            "chunks_processed": 0
+        }
+
+
+async def delete_document_embeddings(document_title: str, category: str) -> dict:
+    """
+    Delete all embeddings for a specific document from Supabase.
+    
+    Args:
+        document_title: The title of the document to delete
+        category: Document category for table routing
+        
+    Returns:
+        dict: Status and results of deletion
+    """
+    try:
+        # Import required modules
+        from supabase import create_client
+        from embeddings_config import CATEGORY_MAP, SUPABASE_TABLE_BY_CATEGORY
+        
+        print(f"🗑️ Starting deletion of embeddings for document: {document_title} in category: {category}")
+        
+        # Get Supabase client
+        supabase_url = os.environ.get("SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY/SUPABASE_KEY")
+            
+        client = create_client(supabase_url, supabase_key)
+        
+        # Map category to table
+        normalized_category = CATEGORY_MAP.get(category, category)
+        table_name = SUPABASE_TABLE_BY_CATEGORY.get(normalized_category)
+        
+        if not table_name:
+            raise ValueError(f"No table mapping found for category: {category}")
+            
+        print(f"📊 Using table: {table_name} for category: {normalized_category}")
+        
+        # First, check how many chunks exist for this document
+        try:
+            # Query for documents with matching title in metadata
+            existing_chunks = client.table(table_name).select("id, metadata").eq(
+                "metadata->document->>title", document_title
+            ).execute()
+            
+            if not existing_chunks.data:
+                print(f"⚠️ No chunks found for document '{document_title}' in {table_name}")
+                return {
+                    "status": "warning",
+                    "message": f"No chunks found for document '{document_title}'",
+                    "chunks_deleted": 0
+                }
+            
+            chunk_ids = [chunk["id"] for chunk in existing_chunks.data]
+            print(f"📝 Found {len(chunk_ids)} chunks to delete for document '{document_title}'")
+            
+            # Delete chunks in batches to avoid timeout
+            batch_size = 50
+            total_deleted = 0
+            
+            for i in range(0, len(chunk_ids), batch_size):
+                batch_ids = chunk_ids[i:i+batch_size]
+                
+                print(f"🔄 Deleting batch {i//batch_size + 1}/{(len(chunk_ids) + batch_size - 1)//batch_size}")
+                
+                # Delete this batch
+                result = client.table(table_name).delete().in_("id", batch_ids).execute()
+                
+                # Count successful deletions
+                if hasattr(result, 'data') and result.data:
+                    total_deleted += len(result.data)
+                else:
+                    # If no data returned, assume all were deleted
+                    total_deleted += len(batch_ids)
+                    
+                print(f"✅ Deleted batch {i//batch_size + 1}: {len(batch_ids)} chunks")
+                
+            print(f"🎉 Successfully deleted {total_deleted} chunks for document '{document_title}' from {table_name}")
+            
+            return {
+                "status": "success",
+                "chunks_deleted": total_deleted,
+                "table": table_name,
+                "category": normalized_category,
+                "document_title": document_title
+            }
+            
+        except Exception as db_error:
+            print(f"❌ Database error during deletion: {str(db_error)}")
+            raise
+        
+    except Exception as e:
+        print(f"❌ Error in embedding deletion: {str(e)}")
+        return {
+            "status": "error", 
+            "message": str(e),
+            "chunks_deleted": 0
+        }
+
+
 # === Q&A MODELS AND FUNCTIONS ===
 
 from pydantic import BaseModel, Field
@@ -633,6 +903,15 @@ app = FastAPI(
     version="1.2.0",
     docs_url="/docs",
     redoc_url="/redoc"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Frontend URLs
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
 )
 
 
@@ -966,7 +1245,6 @@ async def preprocess_document(
         try:
             inferred_issued_date = issued_date or infer_issued_date(cleaned_text)
             if inferred_issued_date:
-                from datetime import datetime
                 try:
                     date_obj = datetime.strptime(inferred_issued_date, "%Y-%m-%d")
                     if date_obj > datetime.now():
@@ -1155,7 +1433,92 @@ async def upload_and_preprocess(
         print(f"❌ Error saving document: {save_error}")
         raise HTTPException(status_code=500, detail=f"Failed to save document: {str(save_error)}")
 
+    # Generate embeddings and store in Supabase
+    embedding_result = None
+    try:
+        print(f"🔄 Starting embedding generation for category: {category}")
+        embedding_result = await generate_and_store_embeddings(payload, category)
+        
+        if embedding_result["status"] == "success":
+            print(f"✅ Embeddings generated successfully: {embedding_result['chunks_stored']} chunks stored")
+            payload["embedding_result"] = embedding_result
+        else:
+            print(f"⚠️ Embedding generation completed with status: {embedding_result['status']}")
+            print(f"Message: {embedding_result.get('message', 'No details')}")
+            payload["embedding_result"] = embedding_result
+            
+    except Exception as embedding_error:
+        print(f"❌ Error in embedding generation: {embedding_error}")
+        # Don't fail the entire request, just log the error
+        payload["embedding_result"] = {
+            "status": "error",
+            "message": str(embedding_error),
+            "chunks_processed": 0
+        }
+
     return payload
+
+
+@app.delete("/v1/delete-document")
+async def delete_document(
+    document_title: str = Form(..., description="Title of the document to delete"),
+    category: str = Form(..., description="Document category (required - must match ACEP categories exactly)")
+):
+    """
+    Delete a document and all its embeddings from the system.
+    
+    This endpoint:
+    1) Deletes all document chunks from the appropriate Supabase table
+    2) Removes the document from the system
+    3) Returns deletion status and statistics
+    """
+    try:
+        print(f"🗑️ Delete request received for document: '{document_title}' in category: '{category}'")
+        
+        # Validate category
+        from ingestion.metadata import validate_category
+        try:
+            validated_category = validate_category(category)
+            print(f"✅ Category validated: {validated_category}")
+        except ValueError as e:
+            print(f"❌ Invalid category: {category}")
+            raise HTTPException(status_code=400, detail=f"Invalid category: {str(e)}")
+        
+        # Delete embeddings from Supabase
+        deletion_result = await delete_document_embeddings(document_title, validated_category)
+        
+        if deletion_result["status"] == "error":
+            print(f"❌ Embedding deletion failed: {deletion_result['message']}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to delete document embeddings: {deletion_result['message']}"
+            )
+        
+        # Build response
+        response = {
+            "status": "success",
+            "message": f"Document '{document_title}' deleted successfully",
+            "document_title": document_title,
+            "category": validated_category,
+            "deletion_result": deletion_result
+        }
+        
+        if deletion_result["status"] == "warning":
+            response["status"] = "warning"
+            response["message"] = f"Document '{document_title}' not found in embeddings, but deletion completed"
+        
+        print(f"✅ Document deletion completed: {deletion_result['chunks_deleted']} chunks deleted")
+        return response
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        print(f"❌ Unexpected error during document deletion: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Internal error during document deletion: {str(e)}"
+        )
 
 
 @app.post("/v1/batch-upload-and-preprocess")
@@ -1820,6 +2183,126 @@ async def get_system_limits():
             "max_dpi": 600,
             "default_dpi": 300
         }
+    }
+
+
+@app.get("/documents_by_category/{category}")
+async def get_documents_by_category(category: str):
+    """Get all unique document filenames for a given category from Supabase."""
+    try:
+        from supabase import create_client
+        import re
+    except ImportError:
+        raise HTTPException(500, "Supabase dependencies not available")
+    
+    # Validate category
+    if category not in SUPABASE_TABLE_BY_CATEGORY:
+        raise HTTPException(400, f"Invalid category. Valid categories are: {list(SUPABASE_TABLE_BY_CATEGORY.keys())}")
+    
+    # Get Supabase credentials
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+    if not url or not key:
+        raise HTTPException(500, "Supabase credentials not configured")
+    
+    # Create Supabase client
+    client = create_client(url, key)
+    table_name = SUPABASE_TABLE_BY_CATEGORY[category]
+    
+    def extract_original_filename(source_file: str) -> str:
+        """Extract original filename from processed source_file name"""
+        if not source_file:
+            return "unknown_filename"
+        
+        # Remove .json extension
+        base_name = source_file.replace('.json', '')
+        
+        # Remove timestamp suffix (pattern: __numbers)
+        original_name = re.sub(r'__\d+$', '', base_name)
+        
+        # Convert underscores back to spaces and hyphens for readability
+        readable_name = original_name.replace('_', ' ')
+        
+        # Add appropriate extensions based on content
+        if any(keyword in readable_name.lower() for keyword in ['meeting', 'minutes', 'board']):
+            return f"{readable_name}.pdf"
+        elif 'resolution' in readable_name.lower():
+            return f"{readable_name}.pdf" if not readable_name.endswith('.docx') else f"{readable_name}.docx"
+        else:
+            return f"{readable_name}.pdf"  # Default to PDF
+    
+    try:
+        # Query to get unique document information from the category table
+        result = client.table(table_name).select("metadata").execute()
+        
+        if not result.data:
+            return {
+                "category": category,
+                "table": table_name,
+                "documents": [],
+                "count": 0,
+                "message": "No documents found for this category"
+            }
+        
+        # Extract unique documents from metadata using source_file field
+        unique_documents = {}  # Use dict to avoid duplicates by source file
+        
+        for row in result.data:
+            metadata = row.get('metadata', {})
+            if isinstance(metadata, dict):
+                source_file = metadata.get('source_file')
+                title = metadata.get('title')
+                
+                if source_file:
+                    # Remove timestamp duplicates - keep only unique base names
+                    base_source = re.sub(r'__\d+\.json$', '', source_file)
+                    
+                    if base_source not in unique_documents:
+                        original_filename = extract_original_filename(source_file)
+                        
+                        # Count chunks for this document
+                        doc_chunks = sum(1 for r in result.data 
+                                       if r.get('metadata', {}).get('source_file', '').startswith(base_source))
+                        
+                        doc_info = {
+                            "filename": original_filename,
+                            "title": title or original_filename,
+                            "document_number": metadata.get('document_number', title),
+                            "issued_date": metadata.get('issued_date'),
+                            "year": metadata.get('year'),
+                            "chunks": doc_chunks
+                        }
+                        
+                        # Clean up None values
+                        doc_info = {k: v for k, v in doc_info.items() if v is not None}
+                        unique_documents[base_source] = doc_info
+        
+        # Convert to list and sort
+        documents_list = list(unique_documents.values())
+        documents_list.sort(key=lambda x: x['filename'])
+        
+        return {
+            "category": category,
+            "table": table_name,
+            "documents": documents_list,
+            "count": len(documents_list),
+            "unique_filenames": sorted([doc['filename'] for doc in documents_list])
+        }
+        
+    except Exception as e:
+        raise HTTPException(500, f"Error querying Supabase: {str(e)}")
+
+
+@app.get("/documents_by_category/{category}/filenames")
+async def get_filenames_by_category(category: str):
+    """Get just the unique filenames for a given category from Supabase (simplified version)."""
+    # Reuse the main endpoint and extract just filenames
+    full_result = await get_documents_by_category(category)
+    
+    return {
+        "category": category,
+        "filenames": full_result.get("unique_filenames", []),
+        "count": full_result.get("count", 0)
     }
 
 

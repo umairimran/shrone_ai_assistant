@@ -114,11 +114,11 @@ transformers_cache/
 # Supabase local
 .supabase/
 
-# === FRONTEND (Next.js/React) ===
-# Note: frontend/ also has its own .gitignore
+# === frontend_2 (Next.js/React) ===
+# Note: frontend_2/ also has its own .gitignore
 
 # Dependencies
-frontend/node_modules/
+frontend_2/node_modules/
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -126,23 +126,23 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Next.js build output
-frontend/.next/
-frontend/out/
+frontend_2/.next/
+frontend_2/out/
 .next/
 out/
 
 # Next.js cache
-frontend/.swc/
+frontend_2/.swc/
 .swc/
 
 # Production builds
-frontend/build/
-frontend/dist/
+frontend_2/build/
+frontend_2/dist/
 build/
 dist/
 
 # Testing
-frontend/coverage/
+frontend_2/coverage/
 coverage/
 .nyc_output
 .jest/
@@ -174,21 +174,21 @@ next-env.d.ts
 .turbo
 
 
-# Local .env files (already covered above but being explicit for frontend)
-frontend/.env
-frontend/.env.local
-frontend/.env.development.local
-frontend/.env.test.local
-frontend/.env.production.local
+# Local .env files (already covered above but being explicit for frontend_2)
+frontend_2/.env
+frontend_2/.env.local
+frontend_2/.env.development.local
+frontend_2/.env.test.local
+frontend_2/.env.production.local
 
 # React DevTools
 .react-devtools
 
-# IDE specific for frontend
-frontend/.vscode/
-frontend/.idea/
+# IDE specific for frontend_2
+frontend_2/.vscode/
+frontend_2/.idea/
 
-# === END FRONTEND ===
+# === END frontend_2 ===
 
 # === DEVELOPMENT & TESTING ===
 # Test artifacts
@@ -236,5 +236,5 @@ credentials.json
 
 # === END SECURITY ===
 
-Frontend.md
+frontend_2.md
 WARP.md
