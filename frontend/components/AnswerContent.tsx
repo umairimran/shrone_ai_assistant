@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import DOMPurify from 'dompurify';
+import React, { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface AnswerContentProps {
@@ -24,6 +23,20 @@ const purifyConfig = {
 
 export function AnswerContent({ html, onCitationClick, className }: AnswerContentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [sanitizedHTML, setSanitizedHTML] = useState<string>('');
+
+  useEffect(() => {
+    // Dynamically import DOMPurify only on client side
+    const sanitizeHTML = async () => {
+      if (typeof window !== 'undefined') {
+        const DOMPurify = (await import('dompurify')).default;
+        const sanitized = DOMPurify.sanitize(html, purifyConfig);
+        setSanitizedHTML(sanitized);
+      }
+    };
+    
+    sanitizeHTML();
+  }, [html]);
 
   useEffect(() => {
     if (!contentRef.current || !onCitationClick) return;
@@ -55,15 +68,15 @@ export function AnswerContent({ html, onCitationClick, className }: AnswerConten
 
   // Process HTML to enhance citation markers
   const processedHtml = React.useMemo(() => {
-    // First sanitize the HTML
-    const sanitized = DOMPurify.sanitize(html, purifyConfig);
+    // Use the sanitized HTML from state
+    if (!sanitizedHTML) return '';
     
     // Enhance citation markers [1], [2], etc.
-    return sanitized.replace(
+    return sanitizedHTML.replace(
       /\[(\d+)\]/g,
       `<button class="citation-marker inline-flex items-center justify-center w-5 h-5 text-xs font-medium text-blue-600 bg-blue-100 rounded-full hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors cursor-pointer dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-800/40" data-citation-id="$1" aria-label="Citation $1" title="Click to view citation $1">$1</button>`
     );
-  }, [html]);
+  }, [sanitizedHTML]);
 
   return (
     <div

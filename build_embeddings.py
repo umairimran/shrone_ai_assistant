@@ -1,14 +1,12 @@
 """
-Build Embeddings Script - Phase 3 Implementation
+Build Embeddings Script - Supabase Implementation
 
-This script implements the exact Phase 3 specification for building embeddings
-with both local FAISS indexes and Supabase storage using LangChain.
+This script builds embeddings and stores them in Supabase vector database.
 
 Features:
 - Reads from processed_output/ folders
 - Normalizes category names
 - Computes OpenAI embeddings via LangChain
-- Writes to local FAISS (one dir per category)
 - Upserts to Supabase tables
 - Idempotent via chunk_id = sha256(text)
 """
@@ -18,7 +16,6 @@ import json
 import glob
 import hashlib
 import argparse
-import shutil
 from pathlib import Path
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -27,7 +24,6 @@ from dotenv import load_dotenv
 load_dotenv()
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
 from supabase import create_client
 from embeddings_config import CATEGORY_MAP, SUPABASE_TABLE_BY_CATEGORY, OPENAI_EMBED_MODEL, BATCH_SIZE
 
@@ -54,8 +50,6 @@ def sanitize_obj(o):
 
 # Configuration
 JSON_ROOT = Path("processed_output")
-LOCAL_ROOT = Path("indexes_local")
-LOCAL_ROOT.mkdir(parents=True, exist_ok=True)
 
 def sha256_text(t: str) -> str:
     """Generate SHA256 hash of text for idempotent chunk IDs"""
@@ -118,66 +112,6 @@ def load_docs_per_category():
                 continue
     
     return buckets
-
-def build_local_faiss(category: str, docs: list[Document], embedder, rebuild=False):
-    """
-    Build local FAISS index for a category.
-    
-    Args:
-        category: Category name
-        docs: List of LangChain Documents
-        embedder: LangChain embeddings instance
-        rebuild: Whether to rebuild from scratch
-        
-    Returns:
-        str: Path to the created FAISS index
-    """
-    out_dir = LOCAL_ROOT / category
-    
-    if rebuild and out_dir.exists():
-        print(f"  Rebuilding local FAISS: removing {out_dir}")
-        shutil.rmtree(out_dir)
-    
-    print(f"  Creating FAISS index with {len(docs)} documents...")
-    
-    # Process in smaller batches to avoid token limits  
-    chunk_size = 30 if len(docs) > 300 else 50  # Even smaller for large categories
-    first_batch = True
-    vs = None
-    
-    for i in range(0, len(docs), chunk_size):
-        batch_docs = docs[i:i+chunk_size]
-        print(f"    Processing batch {i//chunk_size + 1}/{(len(docs)-1)//chunk_size + 1} ({len(batch_docs)} docs)")
-        
-        try:
-            if first_batch:
-                vs = FAISS.from_documents(batch_docs, embedder)
-                first_batch = False
-            else:
-                # Add to existing index
-                batch_vs = FAISS.from_documents(batch_docs, embedder)
-                vs.merge_from(batch_vs)
-        except Exception as e:
-            print(f"    Error with batch {i//chunk_size + 1}: {e}")
-            # Try with mini-batches of 10
-            mini_size = 10
-            for j in range(i, min(i + chunk_size, len(docs)), mini_size):
-                mini_batch = docs[j:j + mini_size]
-                try:
-                    if first_batch:
-                        vs = FAISS.from_documents(mini_batch, embedder)
-                        first_batch = False
-                        print(f"      Mini-batch 1: {len(mini_batch)} docs")
-                    else:
-                        mini_vs = FAISS.from_documents(mini_batch, embedder)
-                        vs.merge_from(mini_vs)
-                        print(f"      Mini-batch {(j-i)//mini_size + 1}: {len(mini_batch)} docs")
-                except Exception as e2:
-                    print(f"      Failed mini-batch: {e2}")
-                    continue
-    
-    vs.save_local(str(out_dir))
-    return str(out_dir)
 
 def upsert_supabase(category: str, docs: list[Document], embedder, rebuild=False):
     """
@@ -308,15 +242,12 @@ def upsert_supabase(category: str, docs: list[Document], embedder, rebuild=False
     return table
 
 def main():
-    """Main CLI function following the Phase 3 specification"""
-    ap = argparse.ArgumentParser(description="Build embeddings for ACEP documents")
-    ap.add_argument("--targets", nargs="+", default=["local", "supabase"], 
-                   choices=["local", "supabase"],
-                   help="Target stores to build (default: both)")
+    """Main CLI function for building Supabase embeddings"""
+    ap = argparse.ArgumentParser(description="Build embeddings for ACEP documents in Supabase")
     ap.add_argument("--categories", nargs="*",
                    help="Optional filter list of categories to process")
     ap.add_argument("--rebuild", action="store_true",
-                   help="Rebuild from scratch (wipe existing data)")
+                   help="Rebuild from scratch (truncate existing data)")
     args = ap.parse_args()
 
     # Initialize OpenAI embeddings via LangChain
@@ -341,27 +272,18 @@ def main():
     for cat, docs in buckets.items():
         print(f"  {cat}: {len(docs)} chunks")
     
-    print(f"\nTargets: {args.targets}")
-    print(f"Rebuild: {args.rebuild}")
+    print(f"\nRebuild: {args.rebuild}")
     print()
 
     # Process each category
     for cat, docs in buckets.items():
         print(f"== {cat} ({len(docs)} chunks) ==")
         
-        if "local" in args.targets:
-            try:
-                path = build_local_faiss(cat, docs, embedder, rebuild=args.rebuild)
-                print(f"  [local] saved → {path}")
-            except Exception as e:
-                print(f"  [local] ERROR: {e}")
-        
-        if "supabase" in args.targets:
-            try:
-                table = upsert_supabase(cat, docs, embedder, rebuild=args.rebuild)
-                print(f"  [supabase] upserted → {table}")
-            except Exception as e:
-                print(f"  [supabase] ERROR: {e}")
+        try:
+            table = upsert_supabase(cat, docs, embedder, rebuild=args.rebuild)
+            print(f"  [supabase] upserted → {table}")
+        except Exception as e:
+            print(f"  [supabase] ERROR: {e}")
         
         print()
 

@@ -1,11 +1,8 @@
 # qa_config.py
 from pathlib import Path
 
-# Retrieval backend: "faiss" or "supabase"
-RETRIEVAL_BACKEND = "supabase"  # changed from faiss to supabase
-
-# Where your Phase-3 local indexes live:
-INDEXES_LOCAL_ROOT = Path("indexes_local")
+# Retrieval backend: only "supabase" is supported
+RETRIEVAL_BACKEND = "supabase"
 
 # Canonical categories (must match your ingestion)
 CATEGORIES = [
@@ -16,7 +13,7 @@ CATEGORIES = [
     "Resolutions",
 ]
 
-# Supabase only (if you switch to that backend)
+# Supabase table mapping by category
 SUPABASE_TABLE_BY_CATEGORY = {
     "Board & Committee Proceedings": "vs_board_committees",
     "Bylaws & Governance Policies": "vs_bylaws",

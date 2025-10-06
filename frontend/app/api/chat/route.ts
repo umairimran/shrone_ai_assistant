@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ question, category, top_k: body.top_k ?? undefined }),
+      body: JSON.stringify({ question, category, top_k: body.top_k ?? 1 }),
       cache: 'no-store'
     });
 

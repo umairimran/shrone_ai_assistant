@@ -1,38 +1,19 @@
-    #!/usr/bin/env python3
-    """
-    Batch Document Preprocessing Script for ACEP Documents
-
-    This script processes all document files in the documents/ folder structure:
-    - Reads documents from documents/{category}/ subfolders
-    - Supports PDF, Word (.doc/.docx), text (.txt), and RTF files
-    - Calls the local preprocessing API for each document
-    - Saves JSON outputs to processed_output/{category}/
-    - Provides progress tracking and error handling
-
-    Usage:
-        python batch_preprocess.py
-
-    Requirements:
-        - FastAPI server running on localhost:8000
-        - Documents organized in documents/{category}/ subfolders
-    """
-
-    import os
-    import json
-    import time
-    import requests
-    from pathlib import Path
-    from typing import Dict, List, Tuple
-    from datetime import datetime
+import os
+import json
+import time
+import requests
+from pathlib import Path
+from typing import Dict, List, Tuple
+from datetime import datetime
 
     # Configuration
-    API_BASE_URL = "http://localhost:8000"
-    DOCUMENTS_DIR = Path("documents")
-    OUTPUT_DIR = Path("processed_output")
-    BATCH_SIZE = 1  # Process one at a time for better error tracking
+API_BASE_URL = "http://localhost:8000"
+DOCUMENTS_DIR = Path("documents")
+OUTPUT_DIR = Path("processed_output")
+BATCH_SIZE = 1  # Process one at a time for better error tracking
 
     # Valid ACEP categories (must match exactly)
-    VALID_CATEGORIES = {
+VALID_CATEGORIES = {
         "Resolutions",
         "By-Laws & Governance Policies",
         "Board and Committee Proceedings",
@@ -41,7 +22,7 @@
     }
 
 
-    def setup_logging():
+def setup_logging():
         """Set up logging for batch processing"""
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
@@ -51,7 +32,7 @@
         
         return log_file
 
-    def log_message(log_file: Path, message: str, print_also: bool = True):
+def log_message(log_file: Path, message: str, print_also: bool = True):
         """Log message to file and optionally print"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] {message}"
@@ -62,7 +43,7 @@
         if print_also:
             print(log_entry)
 
-    def discover_document_files() -> Dict[str, List[Path]]:
+def discover_document_files() -> Dict[str, List[Path]]:
         """
         Discover all document files organized by category folder.
         Supports PDF, Word documents, and text files.
@@ -89,7 +70,7 @@
         
         return files_by_category
 
-    def infer_metadata_from_filename(filepath: Path, category: str) -> Tuple[str, str, str, str]:
+def infer_metadata_from_filename(filepath: Path, category: str) -> Tuple[str, str, str, str]:
         """
         Infer document metadata from filename and path.
         Handles document number length limit and future date validation.
@@ -130,7 +111,7 @@
         
         return title, document_number, issued_date, year
 
-    def get_mime_type(filepath: Path) -> str:
+def get_mime_type(filepath: Path) -> str:
         """Get appropriate MIME type based on file extension"""
         extension = filepath.suffix.lower()
         mime_types = {
@@ -142,7 +123,7 @@
         }
         return mime_types.get(extension, 'application/octet-stream')
 
-    def process_single_document(filepath: Path, category: str, log_file: Path) -> bool:
+def process_single_document(filepath: Path, category: str, log_file: Path) -> bool:
         """
         Process a single document through the preprocessing API.
         Supports PDF, Word documents, and text files.
@@ -207,7 +188,7 @@
             log_message(log_file, f"  ❌ Unexpected error: {e}")
             return False
 
-    def check_api_health() -> bool:
+def check_api_health() -> bool:
         """Check if the preprocessing API is running"""
         try:
             response = requests.get(f"{API_BASE_URL}/health", timeout=5)
@@ -215,7 +196,7 @@
         except:
             return False
 
-    def main():
+def main():
         """Main batch processing function"""
         print("🚀 ACEP Document Batch Preprocessing Script")
         print("=" * 50)
@@ -295,5 +276,5 @@
         else:
             print(f"\n🎉 All {total_success} documents processed successfully!")
 
-    if __name__ == "__main__":
+if __name__ == "__main__":
         main()

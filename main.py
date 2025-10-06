@@ -8,7 +8,7 @@ import time
 import re
 import hashlib
 import tiktoken
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
@@ -35,12 +35,11 @@ from ingestion.metadata import (
 
 # Q&A imports
 from qa_config import (
-    RETRIEVAL_BACKEND, INDEXES_LOCAL_ROOT, TOP_K, FETCH_K, MMR_LAMBDA, ANSWER_MODEL,
+    RETRIEVAL_BACKEND, TOP_K, FETCH_K, MMR_LAMBDA, ANSWER_MODEL,
     SUPABASE_TABLE_BY_CATEGORY, CATEGORIES as QA_CATEGORIES
 )
 try:
     from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-    from langchain_community.vectorstores import FAISS
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.documents import Document as LangChainDocument
     QA_AVAILABLE = True
@@ -489,7 +488,7 @@ Answer ONLY using the provided context. If the answer is not present, say:
 Rules:
 - Do not use outside knowledge.
 - Keep answers concise and quote key language when relevant.
-- Always add short inline citations like (Title; Category; p.X–Y).
+- Always add short inline citations like (Title; Category; heading).
 """
 
     HUMAN = """Category: {category}
@@ -499,7 +498,21 @@ Context:
 {context}
 
 Write the best possible answer strictly from the context. If not found, say you don't have it.
-Then list 2-5 concise citations used (title; category; pages; heading)."""
+
+IMPORTANT: Do NOT include any inline citations or parenthetical references in your answer text. Keep the answer clean and readable.
+
+After your answer, provide citations in this exact format:
+
+Citations:
+1. Title: [exact document title] | Category: [category] | Section: [main section - subheading if available] | Date: [document issued date if available]
+
+For sections, include both main heading and subheading when available, separated by " - " (dash with spaces).
+
+Example:
+Consulting services should respond to emergency department consultation requests within a reasonable time frame, generally within 30 minutes for urgent cases.
+
+Citations:
+1. Title: Specialty Consult Time and Documentation Expectations | Category: Policy & Position Statements | Section: Key Principles - Emergency Physician Authority | Date: 2024-03-15"""
 
     PROMPT = ChatPromptTemplate.from_messages([
         ("system", SYSTEM),
@@ -528,22 +541,6 @@ def validate_qa_category(cat: str) -> str:
             return valid_cat
     
     raise HTTPException(400, f"Invalid category. Must be one of: {QA_CATEGORIES}")
-
-def load_faiss_retriever(category: str):
-    """Load FAISS retriever for category"""
-    if not QA_AVAILABLE:
-        raise HTTPException(500, "Q&A functionality not available - missing dependencies")
-    
-    folder = INDEXES_LOCAL_ROOT / category
-    if not folder.exists():
-        raise HTTPException(404, f"FAISS index not found for category '{category}' at {folder}")
-    
-    vs = FAISS.load_local(str(folder), embeddings=EMB, allow_dangerous_deserialization=True)
-    retriever = vs.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": TOP_K, "fetch_k": FETCH_K, "lambda_mult": MMR_LAMBDA}
-    )
-    return retriever
 
 def load_supabase_retriever(category: str):
     """Load Supabase retriever for category using direct RPC calls"""
@@ -615,9 +612,7 @@ def load_supabase_retriever(category: str):
 
 def get_retriever(category: str):
     """Get retriever based on configured backend"""
-    if RETRIEVAL_BACKEND == "faiss":
-        return load_faiss_retriever(category)
-    elif RETRIEVAL_BACKEND == "supabase":
+    if RETRIEVAL_BACKEND == "supabase":
         return load_supabase_retriever(category)
     else:
         raise HTTPException(500, f"Unsupported RETRIEVAL_BACKEND: {RETRIEVAL_BACKEND}")
@@ -1468,157 +1463,249 @@ async def ask_question(req: AskRequest):
     })
     ans = raw_resp.content if hasattr(raw_resp, "content") else str(raw_resp)
 
-    # --- CLEAN answer: remove any appended "Citations:" list the model may have added ---
-    # Remove a trailing "Citations:" block (numbered lines)
-    ans_clean = re.sub(r"\n\nCitations:\n(?:\d+\..*(?:\n|$))+","", ans)
+    # --- EXTRACT citations from structured Citations section ---
+    citations_extracted = []
+    
+    # Look for the Citations: section in the response
+    citations_match = re.search(r'\n\s*Citations:\s*\n(.*?)$', ans, re.DOTALL | re.MULTILINE)
+    
+    if citations_match:
+        citations_text = citations_match.group(1)
+        
+        # Parse each citation line: "1. Title: [title] | Category: [category] | Section: [section] | Date: [date]"
+        citation_pattern = r'\d+\.\s*Title:\s*([^|]+)\s*\|\s*Category:\s*([^|]+)\s*\|\s*Section:\s*([^|]+)\s*\|\s*Date:\s*(.+?)(?=\n\d+\.|\n\s*$|$)'
+        citation_matches = re.findall(citation_pattern, citations_text, re.MULTILINE | re.DOTALL)
+        
+        # If no matches with Date field, try without Date field (backward compatibility)
+        if not citation_matches:
+            citation_pattern_old = r'\d+\.\s*Title:\s*([^|]+)\s*\|\s*Category:\s*([^|]+)\s*\|\s*Section:\s*(.+?)(?=\n\d+\.|\n\s*$|$)'
+            citation_matches_old = re.findall(citation_pattern_old, citations_text, re.MULTILINE | re.DOTALL)
+            
+            for title, category, section in citation_matches_old:
+                # Clean up extracted values
+                title = title.strip()
+                category = category.strip()
+                section = section.strip()
+                
+                # Clean section - remove dashes and empty indicators
+                if section in ["-", "N/A", "n/a", "None", "none", "", "null"]:
+                    section = ""
+                
+                # Try to extract year from title for fallback date
+                date_match = re.search(r'(\d{4})', title)
+                date = f"{date_match.group(1)}-01-01" if date_match else None
+                
+                citations_extracted.append({
+                    "title": title,
+                    "category": category,
+                    "section": section,
+                    "date": date
+                })
+        else:
+            for title, category, section, date_str in citation_matches:
+                # Clean up extracted values
+                title = title.strip()
+                category = category.strip()
+                section = section.strip()
+                date_str = date_str.strip()
+                
+                # Clean section - remove dashes and empty indicators
+                if section in ["-", "N/A", "n/a", "None", "none", "", "null"]:
+                    section = ""
+                
+                # Parse the date string - could be full date (2024-03-15) or just year (2025)
+                date = None
+                if date_str:
+                    # Try to parse full date first
+                    full_date_match = re.search(r'(\d{4}-\d{2}-\d{2})', date_str)
+                    if full_date_match:
+                        date = full_date_match.group(1)
+                    else:
+                        # Fall back to year extraction
+                        year_match = re.search(r'(\d{4})', date_str)
+                        if year_match:
+                            date = f"{year_match.group(1)}-01-01"
+                
+                citations_extracted.append({
+                    "title": title,
+                    "category": category,
+                    "section": section,
+                    "date": date
+                })
+    
+    # --- CLEAN answer: remove the Citations section and inline citations ---
+    # Remove the entire Citations: section from the answer
+    ans_clean = re.sub(r'\n\s*Citations:\s*\n.*$', '', ans, flags=re.DOTALL | re.MULTILINE)
+    
+    # Remove inline citations in various formats:
+    # Format: (Title; Category; pages)
+    ans_clean = re.sub(r'\s*\([^)]*;\s*[^)]*;\s*p\.\d+[–\-]\d+\)', '', ans_clean, flags=re.IGNORECASE)
+    
+    # Format: (Title; Category; p.X–Y; Section)
+    ans_clean = re.sub(r'\s*\([^)]*;\s*[^)]*;\s*p\.\d+[–\-]\d+;\s*[^)]*\)', '', ans_clean, flags=re.IGNORECASE)
+    
+    # Format: (Title; Category; p.X)
+    ans_clean = re.sub(r'\s*\([^)]*;\s*[^)]*;\s*p\.\d+\)', '', ans_clean, flags=re.IGNORECASE)
+    
+    # Generic format: (anything; anything; p.number)
+    ans_clean = re.sub(r'\s*\([^)]*;\s*[^)]*;\s*p\.\d+[–\-]?\d*\)', '', ans_clean, flags=re.IGNORECASE)
+    
+    # Remove any remaining parenthetical citations with semicolons
+    ans_clean = re.sub(r'\s*\([^)]*;[^)]*\)', '', ans_clean, flags=re.IGNORECASE)
+    
+    # Clean up extra spaces and punctuation issues
+    ans_clean = re.sub(r'\s+', ' ', ans_clean.strip())
+    ans_clean = re.sub(r'\s+\.', '.', ans_clean)  # Fix spacing before periods
+    ans_clean = re.sub(r'\s+,', ',', ans_clean)   # Fix spacing before commas
 
-    # Remove inline parenthetical citations that contain 'Section' (e.g., "(...; p.20–20; Section 5)")
-    ans_clean = re.sub(r"\s*\([^)]*;\s*p\.\d{1,4}(?:–\d{1,4})?;?\s*Section[^)]*\)", "", ans_clean, flags=re.IGNORECASE)
-
-    # Trim whitespace
-    ans_clean = ans_clean.strip()
-
-    # Helper to safely load metadata
-    def safe_load_meta(raw_meta):
-        if raw_meta is None:
-            return {}
-        if isinstance(raw_meta, dict):
-            return raw_meta
-        if isinstance(raw_meta, str):
-            try:
-                return json.loads(raw_meta)
-            except Exception:
-                return {"raw": raw_meta}
-        try:
-            return dict(raw_meta)
-        except Exception:
-            return {}
-
-    # --- Build citations array from metadata, with fallbacks ---
-    # Try to extract Section/page info from the original model text as a fallback
-    # find list of "p.X–Y" and "Section ..." occurrences
-    pages_found = re.findall(r"p\.\d{1,4}(?:–\d{1,4})?", ans, flags=re.IGNORECASE)
-    sections_found = re.findall(r"Section\s+[A-Za-z0-9\.\- ,]+", ans, flags=re.IGNORECASE)
-
+    # --- Build citations array from extracted structured citations ---
     cites = []
     seen_documents = set()  # Track (title, category) pairs to avoid duplicates
     
-    for idx, d in enumerate(docs[:5]):  # Check more docs but deduplicate
-        m_raw = d.metadata
-        m = safe_load_meta(m_raw)
-
-        # nested document object fallback
-        doc_obj = m.get("document") if isinstance(m, dict) else None
-        if not isinstance(doc_obj, dict):
-            doc_obj = {}
-
-        title = doc_obj.get("title") or m.get("title") or m.get("doc_title") or ""
-        category = doc_obj.get("category") or m.get("category") or m.get("folder") or ""
+    # First, use citations extracted from structured Citations section
+    for citation_data in citations_extracted:
+        title = citation_data["title"]
+        category = citation_data["category"] 
+        section = citation_data["section"]
+        date = citation_data["date"]
         
         # Create unique identifier for this document
-        doc_key = (title.strip(), category.strip())
+        doc_key = (title, category)
         
         # Skip if we've already seen this document
         if doc_key in seen_documents:
             continue
             
         seen_documents.add(doc_key)
-        year = doc_obj.get("year") or m.get("year") or None
-
-        # Try many keys for section / heading (IMPROVED to produce full friendly text)
-        section = ""
-        # 1) Direct metadata fields
-        for key in ("section", "section_title", "heading", "heading_title", "title_path", "section_name", "section_desc"):
-            if m.get(key):
-                section = str(m.get(key)).strip()
-                break
-
-        # 2) If heading_path present, try to format it into a friendly string
-        if not section:
-            heading_path = m.get("heading_path") or []
-            if isinstance(heading_path, list) and heading_path:
-                try:
-                    # If looks like ["Article XV","Section 5","Exclusion..."], build full phrase
-                    if len(heading_path) >= 3:
-                        # join first two with comma, rest joined as descriptive text after an em-dash
-                        main = f"{heading_path[0].strip()}, {heading_path[1].strip()}"
-                        desc = " — ".join([str(h).strip() for h in heading_path[2:] if h])
-                        section = f"{main} — {desc}" if desc else main
-                    elif len(heading_path) == 2:
-                        section = f"{heading_path[0].strip()}, {heading_path[1].strip()}"
-                    else:
-                        section = str(heading_path[0]).strip()
-                except Exception:
-                    section = " > ".join([str(h).strip() for h in heading_path])
-
-        # 3) Fallback: try to extract Article/Section and following descriptive phrase from the LLM text
-        if not section:
-            # Look for 'Article ...' (Roman numerals) and 'Section X' and optional description after dash/colon
-            art_match = re.search(r"(Article\s+[IVXLCDM]+)", ans, flags=re.IGNORECASE)
-            sec_match = re.search(r"(Section\s+[A-Za-z0-9\.\-]+)(?:\s*[:\-–—]\s*([^;\n]+))?", ans, flags=re.IGNORECASE)
-            desc_match = None
-            if sec_match:
-                sec_part = sec_match.group(1).strip()
-                desc_part = sec_match.group(2).strip() if sec_match.group(2) else ""
-                # Use Article if found
-                if art_match:
-                    article_part = art_match.group(1).strip()
-                    if desc_part:
-                        section = f"{article_part}, {sec_part} — {desc_part}"
-                    else:
-                        section = f"{article_part}, {sec_part}"
-                else:
-                    # No article found, but we have section
-                    if desc_part:
-                        section = f"{sec_part} — {desc_part}"
-                    else:
-                        section = sec_part
-            else:
-                # Try alternative pattern: "Article ... — <desc>"
-                alt_match = re.search(r"(Article\s+[IVXLCDM]+)\s*[:\-–—]\s*([^;\n]+)", ans, flags=re.IGNORECASE)
-                if alt_match:
-                    section = f"{alt_match.group(1).strip()} — {alt_match.group(2).strip()}"
-
-        # Final cleanup: ensure no excessive whitespace
-        section = section.strip() if section else ""
-
-        # Page-range fallback from metadata
-        page_range = m.get("page_range") or ""
-        if not page_range:
-            ps = m.get("page_start")
-            pe = m.get("page_end")
-            if ps is not None and pe is not None:
-                try:
-                    page_range = f"p.{ps}" if str(ps) == str(pe) else f"p.{ps}–{pe}"
-                except Exception:
-                    page_range = ""
-
-        # If section still empty, use the next found section from model text (if any)
-        if not section and idx < len(sections_found):
-            section = sections_found[idx].strip()
-
-        # If page_range empty, use the next found pages from model text (if any)
-        if not page_range and idx < len(pages_found):
-            page_range = pages_found[idx].strip()
-
-        # Normalize empty strings to explicit empty
-        section = section.strip() if section else ""
-        page_range = page_range.strip() if page_range else ""
-
+        
         citation_entry = {
             "document": {
                 "title": title,
                 "category": category,
                 "section": section,
-                #"page_range": page_range,
-                "year": year
+                "date": date
             }
         }
         cites.append(citation_entry)
-        
-        # Limit to maximum 3 unique citations
-        if len(cites) >= 3:
-            break
+    
+    # If no structured citations found, fall back to metadata extraction
+    if not cites:
+        # Helper to safely load metadata
+        def safe_load_meta(raw_meta):
+            if raw_meta is None:
+                return {}
+            if isinstance(raw_meta, dict):
+                return raw_meta
+            if isinstance(raw_meta, str):
+                try:
+                    return json.loads(raw_meta)
+                except Exception:
+                    return {"raw": raw_meta}
+            try:
+                return dict(raw_meta)
+            except Exception:
+                return {}
+
+        for idx, d in enumerate(docs[:5]):  # Check more docs but deduplicate
+            m_raw = d.metadata
+            m = safe_load_meta(m_raw)
+
+            # nested document object fallback
+            doc_obj = m.get("document") if isinstance(m, dict) else None
+            if not isinstance(doc_obj, dict):
+                doc_obj = {}
+
+            title = doc_obj.get("title") or m.get("title") or m.get("doc_title") or ""
+            category = doc_obj.get("category") or m.get("category") or m.get("folder") or ""
+            
+            # Create unique identifier for this document
+            doc_key = (title.strip(), category.strip())
+            
+            # Skip if we've already seen this document
+            if doc_key in seen_documents:
+                continue
+                
+            seen_documents.add(doc_key)
+            # Get the actual issued date from metadata, not just year from title
+            issued_date = doc_obj.get("issued_date") or m.get("issued_date") or None
+            if not issued_date:
+                # If no issued date, try to get year and format as date
+                year_val = doc_obj.get("year") or m.get("year") or None
+                if year_val:
+                    issued_date = f"{year_val}-01-01"  # Default to January 1st of that year
+
+            # Try many keys for section / heading with enhanced subheading support
+            section = ""
+            for key in ("section", "section_title", "heading", "heading_title", "title_path", "section_name", "section_desc"):
+                if m.get(key):
+                    section = str(m.get(key)).strip()
+                    break
+
+            # If heading_path present, try to format it into a friendly string with subheadings
+            if not section:
+                heading_path = m.get("heading_path") or []
+                if isinstance(heading_path, list) and heading_path:
+                    try:
+                        if len(heading_path) >= 3:
+                            # Main heading + subheading format: "Key Principles - Emergency Physician Authority"
+                            main_heading = heading_path[0].strip()
+                            sub_heading = heading_path[1].strip()
+                            # Join additional path elements with dashes
+                            additional = " - ".join([str(h).strip() for h in heading_path[2:] if h])
+                            if additional:
+                                section = f"{main_heading} - {sub_heading} - {additional}"
+                            else:
+                                section = f"{main_heading} - {sub_heading}"
+                        elif len(heading_path) == 2:
+                            # Main heading + subheading: "Key Principles - Emergency Physician Authority"
+                            section = f"{heading_path[0].strip()} - {heading_path[1].strip()}"
+                        else:
+                            section = str(heading_path[0]).strip()
+                    except Exception:
+                        section = " > ".join([str(h).strip() for h in heading_path])
+
+            # Enhanced fallback: look for section and subsection patterns in the document content
+            if not section and hasattr(d, 'page_content'):
+                content = d.page_content[:500]  # Check first 500 chars for section headers
+                
+                # Look for patterns like "Key Principles" followed by subheadings
+                section_match = re.search(r'(?:^|\n)\s*((?:Key Principles|Executive Summary|Background|Introduction|Recommendations|Guidelines|Policy|Procedures)[^.\n]*)', content, re.IGNORECASE | re.MULTILINE)
+                if section_match:
+                    main_section = section_match.group(1).strip()
+                    
+                    # Look for subsection after the main section
+                    remaining_content = content[section_match.end():]
+                    subsection_match = re.search(r'(?:^|\n)\s*([A-Z][^.\n]{10,50}?)(?:\n|$)', remaining_content, re.MULTILINE)
+                    
+                    if subsection_match:
+                        subsection = subsection_match.group(1).strip()
+                        # Only include if it looks like a proper subsection (not too long, starts with capital)
+                        if len(subsection) <= 50 and subsection[0].isupper():
+                            section = f"{main_section} - {subsection}"
+                    else:
+                        section = main_section
+
+            # Normalize empty strings to explicit empty
+            section = section.strip() if section else ""
+            
+            # Clean section field - replace invalid indicators with empty string
+            invalid_sections = ["-", "N/A", "n/a", "None", "none", "", "null"]
+            if section in invalid_sections:
+                section = ""
+
+            citation_entry = {
+                "document": {
+                    "title": title,
+                    "category": category,
+                    "section": section,
+                    "date": issued_date
+                }
+            }
+            cites.append(citation_entry)
+            
+            # Limit to maximum 3 unique citations
+            if len(cites) >= 3:
+                break
 
     # Return cleaned answer (no citations inside text) and structured citation objects
     return AskResponse(answer=ans_clean, citations=cites)
@@ -1632,7 +1719,6 @@ async def qa_status():
         "qa_available": QA_AVAILABLE,
         "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
         "retrieval_backend": RETRIEVAL_BACKEND if QA_AVAILABLE else None,
-        "indexes_path": str(INDEXES_LOCAL_ROOT) if QA_AVAILABLE else None,
         "supported_categories": QA_CATEGORIES,
         "settings": {
             "top_k": TOP_K,

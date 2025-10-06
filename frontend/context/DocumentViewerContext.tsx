@@ -108,7 +108,15 @@ export function useDocumentUrl(citation: Citation): string | null {
   }
   
   // Generate a mock document URL based on the document title
+  // Check multiple possible title sources with null safety
+  const documentTitle = citation.document?.title || citation.title;
+  
+  if (!documentTitle || typeof documentTitle !== 'string') {
+    // Return a fallback URL if no title is available
+    return `/api/documents/unknown-document.pdf`;
+  }
+  
   // In a real app, this would be resolved from your document storage
-  const docId = citation.doc_title.toLowerCase().replace(/\s+/g, '-');
+  const docId = documentTitle.toLowerCase().replace(/\s+/g, '-');
   return `/api/documents/${docId}.pdf`;
 }

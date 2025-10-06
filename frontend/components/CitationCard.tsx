@@ -1,19 +1,32 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Citation } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/Button';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { useCitationInteractions } from '@/components/AnswerContent';
-import { useDocumentViewer, useDocumentUrl } from '@/context/DocumentViewerContext';
-import { trackCitationCopy, trackDocumentView, trackMissingSourceLink } from '@/services/TelemetryService';
+
+// Helper functions to extract citation data from nested or flat structure
+function getCitationTitle(citation: Citation): string {
+  return citation.document?.title || citation.title || 'Untitled Document';
+}
+
+function getCitationCategory(citation: Citation): string | undefined {
+  return citation.document?.category || citation.category;
+}
+
+function getCitationSection(citation: Citation): string | undefined {
+  return citation.document?.section || citation.section;
+}
+
+function getCitationDate(citation: Citation): string | undefined {
+  return citation.document?.date || citation.date;
+}
 
 interface CitationCardProps {
   citation: Citation;
   index: number;
   isHighlighted?: boolean;
-  onViewDocument?: (citation: Citation) => void;
+  onViewDocument?: (citation: Citation) => void; // Keep for compatibility but not used
   className?: string;
 }
 
@@ -21,62 +34,9 @@ export function CitationCard({
   citation, 
   index, 
   isHighlighted = false, 
-  onViewDocument, 
+  onViewDocument: _onViewDocument, 
   className 
 }: CitationCardProps) {
-  const [copied, setCopied] = useState(false);
-  const { copyCitationToClipboard } = useCitationInteractions();
-  const { openDocument } = useDocumentViewer();
-  const documentUrl = useDocumentUrl(citation);
-
-  const handleCopy = async () => {
-    const citationText = formatCitationText(citation, index);
-    const success = await copyCitationToClipboard(citationText);
-    
-    if (success) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      
-      // Track citation copy event
-      trackCitationCopy(
-        citation.id || `${index + 1}`,
-        index,
-        citation.doc_title
-      );
-    }
-  };
-
-  const handleViewDocument = () => {
-    if (onViewDocument) {
-      onViewDocument(citation);
-    } else if (documentUrl) {
-      // Open in document viewer
-      const initialPage = citation.page_span?.start || 1;
-      openDocument(documentUrl, citation.doc_title, initialPage, [citation]);
-      
-      // Track document view event
-      trackDocumentView(
-        citation.id || `${index + 1}`,
-        index,
-        citation.doc_title,
-        initialPage
-      );
-    }
-  };
-
-  const isDocumentAvailable = citation.link || citation.page_span || documentUrl;
-
-  // Track missing source links for quality monitoring
-  React.useEffect(() => {
-    if (!isDocumentAvailable) {
-      trackMissingSourceLink(
-        citation.id || `${index + 1}`,
-        index,
-        citation.doc_title
-      );
-    }
-  }, [citation.id, citation.doc_title, index, isDocumentAvailable]);
-
   return (
     <div
       id={`citation-${index + 1}`}
@@ -103,16 +63,23 @@ export function CitationCard({
             </span>
             <div className="min-w-0 flex-1">
               <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
-                {citation.doc_title}
+                {getCitationTitle(citation)}
               </h4>
-              {citation.hierarchy_path && (
+              {/* Display section information */}
+              {getCitationSection(citation) && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Section: {getCitationSection(citation)}
+                </p>
+              )}
+              {/* Display legacy hierarchy path for backward compatibility */}
+              {!getCitationSection(citation) && citation.hierarchy_path && (
                 <Tooltip 
                   content={
                     <div className="max-w-xs">
                       <div className="font-semibold mb-1">Document Structure:</div>
                       <div className="text-xs opacity-90">{citation.hierarchy_path}</div>
-                      {citation.section && (
-                        <div className="text-xs opacity-75 mt-1">Section: {citation.section}</div>
+                      {getCitationSection(citation) && (
+                        <div className="text-xs opacity-75 mt-1">Section: {getCitationSection(citation)}</div>
                       )}
                     </div>
                   }
@@ -163,6 +130,21 @@ export function CitationCard({
 
         {/* Citation Metadata */}
         <div className="flex flex-wrap gap-2 mb-3">
+          {/* Category */}
+          {getCitationCategory(citation) && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-green-100 dark:bg-green-900/30 text-xs font-medium text-green-700 dark:text-green-300">
+              {getCitationCategory(citation)}
+            </span>
+          )}
+          
+          {/* Date */}
+          {getCitationDate(citation) && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-900/30 text-xs font-medium text-purple-700 dark:text-purple-300">
+              {formatDisplayDate(getCitationDate(citation)!)}
+            </span>
+          )}
+          
+          {/* Legacy pages support */}
           {citation.pages && (
             <Tooltip
               content={`Referenced on page(s): ${citation.pages}`}
@@ -203,59 +185,6 @@ export function CitationCard({
             </p>
           </blockquote>
         )}
-
-        {/* Action Buttons */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {/* View Document Button */}
-            {isDocumentAvailable ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleViewDocument}
-                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                leftIcon={
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-4.5B4.875 8.25 2.25 10.875 2.25 14.25v2.625a3.375 3.375 0 003.375 3.375h5.25a3.375 3.375 0 003.375-3.375z" />
-                  </svg>
-                }
-              >
-                View in document
-              </Button>
-            ) : (
-              <span className="text-xs text-gray-400 dark:text-gray-500">
-                Source link unavailable
-              </span>
-            )}
-          </div>
-
-          {/* Copy Button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCopy}
-            className={cn(
-              'transition-colors',
-              copied 
-                ? 'text-green-600 dark:text-green-400' 
-                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            )}
-            leftIcon={
-              copied ? (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-              ) : (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                </svg>
-              )
-            }
-            title={copied ? 'Copied!' : 'Copy citation'}
-          >
-            {copied ? 'Copied!' : 'Copy'}
-          </Button>
-        </div>
       </div>
     </div>
   );
@@ -263,8 +192,24 @@ export function CitationCard({
 
 // Format citation text for copying
 function formatCitationText(citation: Citation, index: number): string {
-  const parts = [`[${index + 1}]`, citation.doc_title];
+  const parts = [`[${index + 1}]`, getCitationTitle(citation)];
   
+  const category = getCitationCategory(citation);
+  if (category) {
+    parts.push(category);
+  }
+  
+  const section = getCitationSection(citation);
+  if (section) {
+    parts.push(`Section: ${section}`);
+  }
+  
+  const date = getCitationDate(citation);
+  if (date) {
+    parts.push(formatDisplayDate(date));
+  }
+  
+  // Legacy support
   if (citation.hierarchy_path) {
     parts.push(citation.hierarchy_path);
   }
@@ -281,6 +226,25 @@ function formatCitationText(citation: Citation, index: number): string {
   }
   
   return parts.join(' • ');
+}
+
+// Format date for display
+function formatDisplayDate(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    // Check if it's just a year (ends with -01-01)
+    if (dateString.endsWith('-01-01')) {
+      return date.getFullYear().toString();
+    }
+    // Format as readable date
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch {
+    return dateString; // Return original if parsing fails
+  }
 }
 
 // Citations List Container
