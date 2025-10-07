@@ -1,25 +1,19 @@
-# Frontend Dockerfile (Next.js 14)
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
-RUN if [ -f package-lock.json ]; then npm ci; \
-    elif [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm i --frozen-lockfile; \
-    elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
-    else npm i; fi
+# Frontend Dockerfile (Next
+# Frontend Dockerfile (Fast Test Mode)
+FROM node:20-alpine
 
-FROM node:20-alpine AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+
+# Copy package files and install dependencies
+COPY package.json package-lock.json* ./
+RUN npm install
+
+# Copy project files
 COPY . .
-RUN npm run build
 
-FROM node:20-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+# Disable linting/typecheck and run in dev mode for fast startup
+ENV NEXT_DISABLE_ESLINT=true NEXT_DISABLE_TYPECHECK=true
+
 EXPOSE 3000
-CMD ["npm", "start"]
 
-
+CMD ["npm", "run", "dev"]
