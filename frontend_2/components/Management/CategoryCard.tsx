@@ -9,7 +9,6 @@ interface CategoryCardProps {
   isSelected?: boolean;
   onSelect: (_categoryId: string) => void;
   onUpload: (_categoryId: string) => void;
-  onViewDocuments?: (_categoryId: string) => void;
   className?: string;
 }
 
@@ -17,8 +16,7 @@ export function CategoryCard({
   category, 
   isSelected = false, 
   onSelect, 
-  onUpload, 
-  onViewDocuments,
+  onUpload,
   className 
 }: CategoryCardProps) {
   return (
@@ -71,21 +69,7 @@ export function CategoryCard({
         >
           {isSelected ? 'Selected' : 'Manage'}
         </button>
-        {onViewDocuments && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewDocuments(category.id);
-            }}
-            className="px-3 py-2 text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 dark:bg-green-950 dark:text-green-400 dark:hover:bg-green-900 rounded-md transition-colors"
-          >
-            <svg className="w-4 h-4 mr-1 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            View
-          </button>
-        )}
+
         <button
           onClick={(e) => {
             e.stopPropagation();

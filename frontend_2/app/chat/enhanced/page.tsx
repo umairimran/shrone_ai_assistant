@@ -70,6 +70,7 @@ function EnhancedChatPageContent() {
                 hasMessages={hasMessages}
                 variant="ghost"
                 size="sm"
+                showConfirmation={false}
               />
             </div>
             
@@ -92,6 +93,7 @@ function EnhancedChatPageContent() {
                       hasMessages={hasMessages}
                       variant="secondary"
                       size="sm"
+                      showConfirmation={false}
                     />
                   </div>
                 </div>

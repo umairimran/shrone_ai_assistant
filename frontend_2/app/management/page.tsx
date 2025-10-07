@@ -240,9 +240,8 @@ function ManagementPageContent() {
                 key={category.id}
                 category={category}
                 isSelected={false}
-                onSelect={() => {}}
+                onSelect={() => handleViewDocuments(category.id)}
                 onUpload={() => handleUploadClick(category.id)}
-                onViewDocuments={() => handleViewDocuments(category.id)}
               />
             ))}
           </div>

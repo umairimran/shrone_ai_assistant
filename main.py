@@ -1,306 +1,306 @@
+# Shrone Agent - Document Q&A System
 
-import os
-import sys
-import platform
-import tempfile
-import json
-import time
-import re
-import hashlib
-import tiktoken
-from datetime import datetime, date
-from pathlib import Path
-from typing import Optional, List, Dict
-from dotenv import load_dotenv
+A full-stack document question-answering system built with FastAPI backend and Next.js frontend, using Supabase for vector storage and OpenAI for embeddings and language processing.
 
-# Load environment variables from .env file
-load_dotenv()
+## 🚀 Quick Start
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.exceptions import HTTPException as StarletteHTTPException
-import uvicorn
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- OpenAI API key
+- Supabase account and project
 
-# Import ingestion modules
-from ingestion.schemas import CATEGORIES, DocumentMeta, Chunk, PreprocessResponse
-from ingestion.extract import extract_pdf, extract_docx, extract_txt_md
-from ingestion.clean import normalize_pages, join_pages, filter_table_of_contents, clean_page_text
-from ingestion.structure import split_into_blocks
-from ingestion.chunk import chunk_blocks, count_tokens as get_chunk_token_count
-from ingestion.metadata import (
-    infer_title, infer_document_number, infer_issued_date, derive_year, 
-    validate_category
-)
+### Backend Setup
 
-# Q&A imports
-from qa_config import (
-    RETRIEVAL_BACKEND, TOP_K, FETCH_K, MMR_LAMBDA, ANSWER_MODEL,
-    SUPABASE_TABLE_BY_CATEGORY, CATEGORIES as QA_CATEGORIES
-)
-try:
-    from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.documents import Document as LangChainDocument
-    QA_AVAILABLE = True
-except ImportError:
-    QA_AVAILABLE = False
+1. **Create and activate virtual environment:**
+   ```bash
+python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-# Configuration constants
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-MAX_TOKENS_PER_CHUNK = 1000      # Maximum chunk size
-MAX_OVERLAP_TOKENS = 200         # Maximum overlap
-SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.md'}
-OCR_LANGUAGES = {'eng', 'fra', 'deu', 'spa', 'ita', 'por', 'rus', 'chi_sim', 'chi_tra', 'jpn', 'kor'}
+2. **Install Python dependencies:**
+   ```bash
+pip install -r requirements.txt
+```
 
-# JSON save setup
-# Directory for saving processed outputs
-SAVE_DIR = Path("./processed_output/")
-SAVE_DIR.mkdir(exist_ok=True)
+3. **Set up environment variables:**
+   Create a `.env` file in the root directory:
+   ```env
+OPENAI_API_KEY=your_openai_api_key_here
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_KEY=your_supabase_anon_key
+```
 
-def validate_embedding_safety(chunks: List[Dict], target_range: tuple = (400, 800)) -> Dict:
-    """
-    Embedding safety validation pass with deduplication and quality checks.
-    
-    Args:
-        chunks: List of chunk dictionaries
-        target_range: Tuple of (min_tokens, max_tokens) for target range
-    
-    Returns:
-        Dict with validation results and warnings
-    """
-    
-    if not chunks:
-        return {"status": "error", "message": "No chunks to validate"}
-    
-    min_target, max_target = target_range
-    
-    # Track statistics
-    stats = {
-        "total_chunks": len(chunks),
-        "in_range": 0,
-        "below_range": 0, 
-        "above_range": 0,
-        "duplicates_found": 0,
-        "warnings": []
-    }
-    
-    # Deduplication tracking with smarter logic
-    text_hashes = set()
-    similarity_hashes = set()  # For detecting near-duplicates
-    unique_chunks = []
-    
-    for i, chunk in enumerate(chunks):
-        text = chunk.get("text") or ""  # Handle None values safely
-        text = text.strip() if text else ""  # Safe strip operation
-        token_count = chunk.get("token_count", 0)
-        
-        if not text or token_count < 50:  # Skip very small chunks
-            continue
-        
-        # Calculate exact hash for identical content
-        text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-        
-        # Calculate similarity hash for near-duplicates (normalized text)
-        normalized_text = ' '.join(text.split()).lower()  # Normalize whitespace and case
-        similarity_hash = hashlib.md5(normalized_text.encode('utf-8')).hexdigest()
-        
-        # Check for exact duplicates
-        if text_hash in text_hashes:
-            stats["duplicates_found"] += 1
-            stats["warnings"].append(f"Exact duplicate chunk found at index {i}")
-            continue
-        
-        # Check for near-duplicates only if chunks are substantial (>100 tokens)
-        if token_count > 100 and similarity_hash in similarity_hashes:
-            # Additional check: ensure it's not just similar structure but different content
-            existing_similar = False
-            for existing_chunk in unique_chunks:
-                existing_normalized = ' '.join(existing_chunk.get("text", "").split()).lower()
-                if existing_normalized == normalized_text:
-                    existing_similar = True
-                    break
-            
-            if existing_similar:
-                stats["duplicates_found"] += 1
-                stats["warnings"].append(f"Near-duplicate chunk found at index {i}")
-                continue
-        
-        # Add to tracking sets and unique chunks
-        text_hashes.add(text_hash)
-        if token_count > 100:  # Only track similarity for substantial chunks
-            similarity_hashes.add(similarity_hash)
-        unique_chunks.append(chunk)
-        
-        # Token range validation
-        if min_target <= token_count <= max_target:
-            stats["in_range"] += 1
-        elif token_count < min_target:
-            stats["below_range"] += 1
-            if token_count < 100:
-                stats["warnings"].append(f"Very small chunk at index {i}: {token_count} tokens")
-        else:
-            stats["above_range"] += 1
-    
-    # Update total after deduplication
-    stats["unique_chunks"] = len(unique_chunks)
-    
-    # Calculate percentages
-    if stats["unique_chunks"] > 0:
-        stats["in_range_pct"] = (stats["in_range"] / stats["unique_chunks"]) * 100
-        stats["below_range_pct"] = (stats["below_range"] / stats["unique_chunks"]) * 100
-        stats["above_range_pct"] = (stats["above_range"] / stats["unique_chunks"]) * 100
-    else:
-        stats["in_range_pct"] = 0
-        stats["below_range_pct"] = 0
-        stats["above_range_pct"] = 0
-    
-    # Generate simple warnings
-    if stats["duplicates_found"] > 0:
-        stats["warnings"].append(f"Found {stats['duplicates_found']} duplicate chunks (cleaned)")
-    
-    # Simplified status determination - focus on duplicates, not complex targets
-    if stats["duplicates_found"] == 0:
-        stats["status"] = "safe"
-        stats["message"] = "All chunks are unique and ready for embedding"
-    else:
-        stats["status"] = "cleaned"
-        stats["message"] = f"Removed {stats['duplicates_found']} duplicates, chunks are now safe"
-    
-    return stats
+4. **Run the backend server:**
+   ```bash
+python main.py
+```
+   Keep this terminal open. The backend will run on `http://localhost:8000`
 
+### Frontend Setup
 
-def enhance_chunk_quality(chunks: List[Dict], target_range: tuple = (400, 800)) -> List[Dict]:
-    """
-    SIMPLIFIED CHUNKING: Focus on content preservation over optimization.
-    
-    Simple rules:
-    1. Keep ALL content (zero data loss guarantee)
-    2. Merge very small chunks (< 200 tokens) with neighbors
-    3. Split very large chunks (> 1000 tokens) at paragraph boundaries
-    4. Keep everything else as-is
-    
-    This approach is much simpler, faster, and more reliable than complex optimization.
-    """
-    if not chunks:
-        return chunks
-    
-    # Import tokenizer for accurate token counting
-    try:
-        tokenizer = tiktoken.get_encoding("cl100k_base")
-    except ImportError:
-        tokenizer = None
-        print("WARNING: tiktoken not available, using approximate token counts")
-    
-    def count_tokens(text: str) -> int:
-        """Count tokens accurately using tiktoken."""
-        if not text:  # Handle None or empty string
-            return 0
-        if tokenizer:
-            return len(tokenizer.encode(text))
-        else:
-            # Fallback to word count approximation
-            return int(len(text.split()) * 1.3)
-    
-    enhanced_chunks = []
-    i = 0
-    
-    while i < len(chunks):
-        chunk = chunks[i]
-        text = chunk.get("text") or ""  # Handle None values safely
-        text = text.strip() if text else ""  # Safe strip operation
-        token_count = chunk.get("token_count", 0)
-        
-        # Skip empty chunks
-        if not text:
-            i += 1
-            continue
-        
-        # Recalculate accurate token count
-        accurate_count = count_tokens(text)
-        chunk["token_count"] = accurate_count
-        
-        # RULE 1: Merge very small chunks (< 200 tokens) with next chunk
-        if accurate_count < 200 and i < len(chunks) - 1:
-            next_chunk = chunks[i + 1]
-            next_text = next_chunk.get("text") or ""  # Handle None safely
-            next_text = next_text.strip() if next_text else ""  # Safe strip
-            
-            if next_text:  # Only merge if next chunk has content
-                combined_text = text + "\n\n" + next_text
-                combined_tokens = count_tokens(combined_text)
-                
-                # Only merge if result is reasonable size (< 1000 tokens)
-                if combined_tokens <= 1000:
-                    merged_chunk = {
-                        "text": combined_text,
-                        "token_count": combined_tokens,
-                        "page_start": chunk.get("page_start", 1),
-                        "page_end": next_chunk.get("page_end", chunk.get("page_end", 1)),
-                        "heading_path": chunk.get("heading_path", []),
-                        "chunk_index": chunk.get("chunk_index", i)
-                    }
-                    enhanced_chunks.append(merged_chunk)
-                    i += 2  # Skip both chunks since we merged them
-                    continue
-        
-        # RULE 2: Split very large chunks (> 1000 tokens) at paragraph boundaries
-        elif accurate_count > 1000:
-            paragraphs = text.split('\n\n')
-            current_text = ""
-            current_tokens = 0
-            split_index = 0
-            
-            for para in paragraphs:
-                para = para.strip()
-                if not para:
-                    continue
-                    
-                para_tokens = count_tokens(para)
-                
-                # If adding this paragraph would exceed 1000 tokens, save current chunk
-                if current_tokens > 0 and current_tokens + para_tokens > 1000:
-                    if current_text:
-                        split_chunk = {
-                            "text": current_text,
-                            "token_count": current_tokens,
-                            "page_start": chunk.get("page_start", 1),
-                            "page_end": chunk.get("page_end", 1),
-                            "heading_path": chunk.get("heading_path", []),
-                            "chunk_index": f"{chunk.get('chunk_index', i)}.{split_index}"
-                        }
-                        enhanced_chunks.append(split_chunk)
-                        split_index += 1
-                    
-                    # Start new chunk with current paragraph
-                    current_text = para
-                    current_tokens = para_tokens
-                else:
-                    # Add paragraph to current chunk
-                    if current_text:
-                        current_text += "\n\n" + para
-                        current_tokens += para_tokens
-                    else:
-                        current_text = para
-                        current_tokens = para_tokens
-            
-            # Add final chunk if there's content
-            if current_text:
-                final_chunk = {
-                    "text": current_text,
-                    "token_count": current_tokens,
-                    "page_start": chunk.get("page_start", 1),
-                    "page_end": chunk.get("page_end", 1),
-                    "heading_path": chunk.get("heading_path", []),
-                    "chunk_index": f"{chunk.get('chunk_index', i)}.{split_index}" if split_index > 0 else chunk.get('chunk_index', i)
-                }
-                enhanced_chunks.append(final_chunk)
-        
-        # RULE 3: Keep normal-sized chunks as-is (200-1000 tokens)
-        else:
-            enhanced_chunks.append(chunk)
-        
+1. **Open a new terminal** and navigate to the frontend directory:
+   ```bash
+cd frontend
+```
+
+2. **Install Node.js dependencies:**
+   ```bash
+npm install
+```
+
+3. **Set up frontend environment:**
+   Create a `.env.local` file in the `frontend/` directory:
+   ```env
+BACKEND_URL=http://localhost:8000
+```
+
+4. **Run the frontend development server:**
+   ```bash
+npm run dev
+```
+   The frontend will run on `http://localhost:3000`
+
+## 🎯 Usage
+
+1. Open your browser and go to `http://localhost:3000`
+2. Select a document category from the sidebar
+3. Type your question in the chat input
+4. Get AI-powered answers with citations
+
+## 📁 Project Structure
+
+```
+├── main.py                 # FastAPI backend server
+├── qa_config.py           # QA system configuration
+├── build_embeddings.py    # Script to build embeddings for documents
+├── frontend/              # Next.js frontend application
+├── ingestion/             # Document processing modules
+├── documents/             # Document storage
+├── processed_output/      # Processed documents
+└── requirements.txt       # Python dependencies
+```
+
+## 🔧 API Endpoints
+
+- `GET /` - Health check
+- `POST /v1/ask` - Ask questions about documents
+- `GET /v1/qa-status` - Get QA system status
+- `POST /v1/preprocess` - Upload and process documents
+
+## 📝 Document Categories
+
+- Board & Committee Proceedings
+- Bylaws & Governance Policies  
+- External Advocacy & Communications
+- Policy & Position Statements
+- Resolutions
+
+## 🛠️ Development
+
+### Building Embeddings
+To process and embed new documents:
+```bash
+python build_embeddings.py
+```
+
+### Processing Documents
+To preprocess documents:
+```bash
+python batch_preprocess.py
+```
+
+## 🔒 Environment Variables
+
+### Backend (.env)
+```env
+OPENAI_API_KEY=your_openai_api_key
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_key
+```
+
+### Frontend (.env.local)
+```env
+BACKEND_URL=http://localhost:8000
+```
+
+## 📊 Technology Stack
+
+- **Backend**: FastAPI, LangChain, OpenAI, Supabase
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **Database**: Supabase (PostgreSQL with vector support)
+- **AI/ML**: OpenAI GPT-4 and text-embedding-3-small
+
+## 🏃‍♂️ Running Both Services
+
+1. **Terminal 1 (Backend):**
+   ```bash
+# Activate venv and run backend
+   source venv/bin/activate
+   python main.py
+```
+
+2. **Terminal 2 (Frontend):**
+   ```bash
+# Navigate to frontend and run dev server
+   cd frontend
+   npm run dev
+```
+
+3. **Access the application:** Open `http://localhost:3000` in your browser
+
+Both services need to be running simultaneously for the full application to work.# Shrone Agent - Document Q&A System
+
+A full-stack document question-answering system built with FastAPI backend and Next.js frontend, using Supabase for vector storage and OpenAI for embeddings and language processing.
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- OpenAI API key
+- Supabase account and project
+
+### Backend Setup
+
+1. **Create and activate virtual environment:**
+   ```bash
+python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+2. **Install Python dependencies:**
+   ```bash
+pip install -r requirements.txt
+```
+
+3. **Set up environment variables:**
+   Create a `.env` file in the root directory:
+   ```env
+OPENAI_API_KEY=your_openai_api_key_here
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_KEY=your_supabase_anon_key
+```
+
+4. **Run the backend server:**
+   ```bash
+python main.py
+```
+   Keep this terminal open. The backend will run on `http://localhost:8000`
+
+### Frontend Setup
+
+1. **Open a new terminal** and navigate to the frontend directory:
+   ```bash
+cd frontend
+```
+
+2. **Install Node.js dependencies:**
+   ```bash
+npm install
+```
+
+3. **Set up frontend environment:**
+   Create a `.env.local` file in the `frontend/` directory:
+   ```env
+BACKEND_URL=http://localhost:8000
+```
+
+4. **Run the frontend development server:**
+   ```bash
+npm run dev
+```
+   The frontend will run on `http://localhost:3000`
+
+## 🎯 Usage
+
+1. Open your browser and go to `http://localhost:3000`
+2. Select a document category from the sidebar
+3. Type your question in the chat input
+4. Get AI-powered answers with citations
+
+## 📁 Project Structure
+
+```
+├── main.py                 # FastAPI backend server
+├── qa_config.py           # QA system configuration
+├── build_embeddings.py    # Script to build embeddings for documents
+├── frontend/              # Next.js frontend application
+├── ingestion/             # Document processing modules
+├── documents/             # Document storage
+├── processed_output/      # Processed documents
+└── requirements.txt       # Python dependencies
+```
+
+## 🔧 API Endpoints
+
+- `GET /` - Health check
+- `POST /v1/ask` - Ask questions about documents
+- `GET /v1/qa-status` - Get QA system status
+- `POST /v1/preprocess` - Upload and process documents
+
+## 📝 Document Categories
+
+- Board & Committee Proceedings
+- Bylaws & Governance Policies  
+- External Advocacy & Communications
+- Policy & Position Statements
+- Resolutions
+
+## 🛠️ Development
+
+### Building Embeddings
+To process and embed new documents:
+```bash
+python build_embeddings.py
+```
+
+### Processing Documents
+To preprocess documents:
+```bash
+python batch_preprocess.py
+```
+
+## 🔒 Environment Variables
+
+### Backend (.env)
+```env
+OPENAI_API_KEY=your_openai_api_key
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_key
+```
+
+### Frontend (.env.local)
+```env
+BACKEND_URL=http://localhost:8000
+```
+
+## 📊 Technology Stack
+
+- **Backend**: FastAPI, LangChain, OpenAI, Supabase
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **Database**: Supabase (PostgreSQL with vector support)
+- **AI/ML**: OpenAI GPT-4 and text-embedding-3-small
+
+## 🏃‍♂️ Running Both Services
+
+1. **Terminal 1 (Backend):**
+   ```bash
+# Activate venv and run backend
+   source venv/bin/activate
+   python main.py
+```
+
+2. **Terminal 2 (Frontend):**
+   ```bash
+# Navigate to frontend and run dev server
+   cd frontend
+   npm run dev
+```
+
+3. **Access the application:** Open `http://localhost:3000` in your browser
+
+Both services need to be running simultaneously for the full application to work.
         i += 1
     
     # Simple statistics (no complex targeting)

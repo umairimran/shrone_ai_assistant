@@ -70,6 +70,7 @@ function ChatPageContent() {
                 hasMessages={hasMessages}
                 variant="ghost"
                 size="sm"
+                showConfirmation={false}
               />
             </div>
             

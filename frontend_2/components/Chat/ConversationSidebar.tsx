@@ -83,6 +83,7 @@ export function ConversationSidebar({
           variant="primary"
           size="md"
           className="w-full justify-center"
+          showConfirmation={false}
         />
       </div>
 
