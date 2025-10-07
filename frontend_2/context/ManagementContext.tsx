@@ -114,15 +114,15 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     
     return documents.map((doc: any, index: number) => ({
       id: `${categoryId}-${index}`,
-      name: doc.filename,
-      sizeMB: 0,
-      type: 'pdf',
+      name: doc.name || doc.filename || 'Unknown Document',
+      sizeMB: doc.sizeMB || 0,
+      type: doc.type || 'pdf',
       status: 'uploaded' as const,
-      title: doc.title,
+      title: doc.title || doc.name || 'Unknown Document',
       category: categoryName,
-      uploadedAt: doc.issued_date,
-      filename: doc.filename,
-      source_file: doc.filename
+      uploadedAt: doc.uploadedAt || new Date().toISOString(),
+      filename: doc.filename || doc.name || 'unknown.pdf',
+      source_file: doc.source_file || doc.filename || 'unknown.pdf'
     }));
   }, [isCacheReady, categories]);
 

@@ -93,24 +93,24 @@ class DocumentCacheService {
     const cacheData: CategoryData = {};
     
     try {
-      // Get backend URL from config
-      const backendUrl = config.backendUrl;
-      console.log(`🌐 [CACHE] Using backend URL: ${backendUrl}`);
+      // Use frontend API route instead of calling backend directly
+      console.log(`🌐 [CACHE] Using frontend API routes`);
       
       // Call API for each category
       for (const category of categories) {
         console.log(`📥 [CACHE] Fetching documents for: ${category}`);
         
         try {
-          const url = `${backendUrl}/documents_by_category/${encodeURIComponent(category)}`;
+          // Use frontend API route that properly transforms the data
+          const url = `/api/documents?category=${encodeURIComponent(category)}`;
           console.log(`🌐 [CACHE] Request URL: ${url}`);
           
           const response = await fetch(url);
           console.log(`📡 [CACHE] Response status for ${category}: ${response.status} ${response.statusText}`);
           
           if (response.ok) {
-            const data: DocumentsResponse = await response.json();
-            console.log(`📄 [CACHE] Raw response data for ${category}:`, JSON.stringify(data, null, 2));
+            const data = await response.json();
+            console.log(`📄 [CACHE] Transformed response data for ${category}:`, JSON.stringify(data, null, 2));
             
             cacheData[category] = {
               documents: data.documents || [],
