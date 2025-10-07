@@ -7,7 +7,7 @@ const renderChat = () =>
 
 declare const global: typeof globalThis & { fetch: jest.Mock };
 
-describe('Shrone Chatbot', () => {
+describe('Sharon Chatbot', () => {
   beforeEach(() => {
     window.localStorage.clear();
     global.fetch = jest.fn();
@@ -15,7 +15,7 @@ describe('Shrone Chatbot', () => {
 
   it('renders initial messages and document tag', () => {
     renderChat();
-    expect(screen.getByText('Shrone Chatbot')).toBeInTheDocument();
+    expect(screen.getByText('Sharon Chatbot')).toBeInTheDocument();
     expect(screen.getByText("hello there sir how are you")).toBeInTheDocument();
     expect(screen.getByText("Hello! I’m here to assist you. How can I help you today?")).toBeInTheDocument();
     expect(screen.getByText('It_s_Sugar_Lease_Lincoln_Road_2')).toBeInTheDocument();

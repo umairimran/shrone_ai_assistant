@@ -7,7 +7,7 @@ import { ThemeProvider } from '@/context/ThemeContext';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Shrone Chatbot - Document Assistant',
+  title: 'Sharon Chatbot - Document Assistant',
   description: 'AI-powered chatbot for document analysis with intelligent citations and insights',
 };
 
@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="dark">
       <body className={inter.className}>
         <ThemeProvider>
           {children}

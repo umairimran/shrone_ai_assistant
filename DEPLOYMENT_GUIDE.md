@@ -49,7 +49,7 @@ In your `.github/workflows/deploy.yml`, add environment variables:
 - name: Deploy to EC2 Server
   run: |
     ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-      cd /home/ubuntu/Shrone_Agent
+      cd /home/ubuntu/Sharon_Agent
       # Set environment variables
       export NEXT_PUBLIC_BACKEND_URL=http://${{ secrets.EC2_HOST }}:8000
       export BACKEND_URL=http://${{ secrets.EC2_HOST }}:8000

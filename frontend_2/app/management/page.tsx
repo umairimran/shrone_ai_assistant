@@ -83,7 +83,6 @@ function ManagementPageContent() {
     
     const initCache = async () => {
       if (!DocumentCacheService.isCacheInitialized()) {
-        console.log('🚀 Initializing cache on page load...');
         
         // Test backend connection first
         const backendOk = await testBackendConnection();
@@ -109,7 +108,6 @@ function ManagementPageContent() {
 
   const handleViewDocuments = (categoryId: string) => {
     if (!isClient || !DocumentCacheService.isCacheInitialized()) {
-      console.log('⏳ Cache not ready, initializing...');
       initializeCache();
       return;
     }
@@ -177,7 +175,7 @@ function ManagementPageContent() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600 dark:text-gray-400">
-            Loading document cache...
+            Loading...
           </p>
         </div>
       </div>
@@ -210,20 +208,6 @@ function ManagementPageContent() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Cache Status Indicator */}
-            <div className="flex items-center gap-2">
-              {isClient && DocumentCacheService.isCacheInitialized() ? (
-                <>
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-sm text-green-600">Cache Ready</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-yellow-600">Initializing...</span>
-                </>
-              )}
-            </div>
             <button
               onClick={handleGeneralUploadClick}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"

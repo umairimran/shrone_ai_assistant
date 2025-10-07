@@ -133,10 +133,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500 text-sm font-bold text-white shadow-sm">
-              SC
+              SH
             </div>
             <div>
-              <p className="text-base font-semibold text-gray-900 dark:text-gray-100">Shrone</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-gray-100">Sharon</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">Document Assistant</p>
             </div>
           </div>

@@ -1,6 +1,6 @@
-# Shrone Chatbot Frontend
+# Sharon Chatbot Frontend
 
-A production-ready React and Next.js 14 application that replicates the “Shrone Chatbot” experience with a document-aware chat interface, dark UI, and mocked APIs for chat, uploads, and document management.
+A production-ready React and Next.js 14 application that replicates the "Sharon Chatbot" experience with a document-aware chat interface, dark UI, and mocked APIs for chat, uploads, and document management.
 
 ## Prerequisites
 

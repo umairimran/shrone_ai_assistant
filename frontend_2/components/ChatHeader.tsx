@@ -16,7 +16,7 @@ export function ChatHeader({ className }: ChatHeaderProps) {
       )}
     >
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Shrone Chatbot</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Sharon Chatbot</h1>
         <p className="mt-1 text-sm text-[#9aa3af]">
           Chat with your documents and get instant, document-aware insights.
         </p>

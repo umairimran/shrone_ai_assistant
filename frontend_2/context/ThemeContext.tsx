@@ -22,12 +22,12 @@ function getSystemTheme(): ResolvedTheme {
 }
 
 function getStoredTheme(): Theme {
-  if (typeof window === 'undefined') return 'system';
+  if (typeof window === 'undefined') return 'dark';
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme;
-    return stored && ['light', 'dark', 'system'].includes(stored) ? stored : 'system';
+    return stored && ['light', 'dark', 'system'].includes(stored) ? stored : 'dark';
   } catch {
-    return 'system';
+    return 'dark';
   }
 }
 
@@ -37,7 +37,7 @@ function resolveTheme(theme: Theme): ResolvedTheme {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('system');
+  const [theme, setThemeState] = useState<Theme>('dark');
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('dark');
 
   useEffect(() => {

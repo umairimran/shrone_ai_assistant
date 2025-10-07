@@ -1,4 +1,4 @@
-# Shrone Agent - Document Q&A System
+# Sharon Agent - Document Q&A System
 
 A full-stack document question-answering system built with FastAPI backend and Next.js frontend, using Supabase for vector storage and OpenAI for embeddings and language processing.
 
@@ -149,7 +149,7 @@ BACKEND_URL=http://localhost:8000
 
 3. **Access the application:** Open `http://localhost:3000` in your browser
 
-Both services need to be running simultaneously for the full application to work.# Shrone Agent - Document Q&A System
+Both services need to be running simultaneously for the full application to work.# Sharon Agent - Document Q&A System
 
 A full-stack document question-answering system built with FastAPI backend and Next.js frontend, using Supabase for vector storage and OpenAI for embeddings and language processing.
 

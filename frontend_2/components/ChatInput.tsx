@@ -4,38 +4,38 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useEnhancedChat } from '@/context/EnhancedChatContext';
 
-const PLACEHOLDER_TEXTS = [
-  'Ask me anything about the document...',
-  'What would you like to know?',
-  'Type your question here...',
-  'How can I help you today?',
-  'Ask about any section or detail...',
-  'Need clarification on something?',
-  'What information are you looking for?'
-];
-
 export function ChatInput() {
   const { sendMessage, isAssistantTyping } = useEnhancedChat();
   const [value, setValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Rotate placeholder text every 3 seconds
-  useEffect(() => {
-    if (isFocused || value.length > 0) return;
-    
-    const interval = setInterval(() => {
-      setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDER_TEXTS.length);
-    }, 3000);
+  // Auto-resize textarea based on content
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textAreaRef.current;
+    if (!textarea) return;
 
-    return () => clearInterval(interval);
-  }, [isFocused, value]);
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = 'auto';
+    // Set height to scrollHeight, but cap it at max height (144px = max-h-36)
+    const maxHeight = 144;
+    const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+    textarea.style.height = `${newHeight}px`;
+  }, []);
+
+  // Adjust height when value changes
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [value, adjustTextareaHeight]);
 
   const handleSend = useCallback(async () => {
     if (!value.trim()) return;
     await sendMessage(value);
     setValue('');
+    // Reset textarea height after sending
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = 'auto';
+    }
     textAreaRef.current?.focus();
   }, [sendMessage, value]);
 
@@ -49,17 +49,26 @@ export function ChatInput() {
     [handleSend]
   );
 
+  const handleChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setValue(event.target.value);
+  }, []);
+
+  const handleContainerClick = useCallback(() => {
+    textAreaRef.current?.focus();
+  }, []);
+
   return (
-    <div className="sticky bottom-0 z-10 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-zinc-900 px-4 py-4 sm:px-6">
+    <div className="sticky bottom-0 z-10 bg-white dark:bg-zinc-900 px-4 py-4 sm:px-6">
       <div className="mx-auto flex max-w-3xl items-end gap-3">
         <div
           className={cn(
-            'flex-1 flex items-end rounded-xl transition-shadow duration-200',
+            'flex-1 flex items-end rounded-xl transition-shadow duration-200 cursor-text',
             'bg-white dark:bg-gray-800',
             isFocused 
               ? 'shadow-[0_0_0_3px_rgba(59,130,246,0.15)] dark:shadow-[0_0_0_3px_rgba(96,165,250,0.15)]'
               : 'shadow-[0_0_0_1px_rgba(229,231,235,1)] dark:shadow-[0_0_0_1px_rgba(55,65,81,1)]'
           )}
+          onClick={handleContainerClick}
         >
           <div className="flex-1 px-4 py-3">
             <label htmlFor="chat-input" className="sr-only">
@@ -69,12 +78,12 @@ export function ChatInput() {
               ref={textAreaRef}
               id="chat-input"
               value={value}
-              onChange={(event) => setValue(event.target.value)}
+              onChange={handleChange}
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={isFocused && value.length === 0 ? '' : PLACEHOLDER_TEXTS[placeholderIndex]}
-              className="max-h-36 w-full resize-none bg-transparent text-sm leading-relaxed text-gray-900 dark:text-gray-100 placeholder:text-gray-500 placeholder:transition-opacity placeholder:duration-300 outline-none"
+              placeholder="Press Enter to send"
+              className="w-full resize-none bg-transparent text-sm leading-relaxed text-gray-900 dark:text-gray-100 placeholder:text-gray-500 outline-none min-h-[24px]"
               rows={1}
               aria-label="Message input"
               aria-describedby="input-help"
@@ -121,18 +130,6 @@ export function ChatInput() {
           </button>
         </div>
       </div>
-      {value.length > 0 && (
-        <div className="mx-auto mt-2 flex max-w-3xl justify-between px-2 text-xs text-gray-500">
-          <span>Press Enter to send, Shift+Enter for new line</span>
-          <span className={cn(
-            'transition-colors',
-            value.length > 1000 && 'text-yellow-500',
-            value.length > 2000 && 'text-red-500'
-          )}>
-            {value.length} characters
-          </span>
-        </div>
-      )}
     </div>
   );
 }

@@ -31,11 +31,9 @@ export function ConversationSidebar({
     if (isOpen) onClose();
   });
 
-  const handleDocumentManagementClick = async (e: React.MouseEvent) => {
+  const handleDocumentManagementClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    console.log('Document Management clicked - initializing cache...');
-    await DocumentCacheService.initializeCache();
-    // Navigate to management page after cache is ready
+    // Navigate immediately to management page
     window.location.href = '/management';
   };
 
@@ -53,10 +51,10 @@ export function ConversationSidebar({
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500 text-sm font-bold text-white shadow-sm">
-            SC
+              SH
           </div>
           <div>
-            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">Shrone</p>
+            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">Sharon</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">Document Assistant</p>
           </div>
         </div>
