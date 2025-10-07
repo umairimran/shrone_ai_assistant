@@ -85,7 +85,7 @@ class DocumentCacheService {
 
   // Initialize cache by calling ALL category APIs ONCE
   static async initializeCache(): Promise<void> {
-    console.log('🔄 INITIALIZING CACHE - Calling all category APIs...');
+    console.log('🔄 [CACHE] INITIALIZING CACHE - Calling all category APIs...');
     
     // Debug environment variables
     debugConfig();
@@ -95,25 +95,33 @@ class DocumentCacheService {
     try {
       // Get backend URL from config
       const backendUrl = config.backendUrl;
-      console.log(`🌐 Using backend URL: ${backendUrl}`);
+      console.log(`🌐 [CACHE] Using backend URL: ${backendUrl}`);
       
       // Call API for each category
       for (const category of categories) {
-        console.log(`📥 Fetching documents for: ${category}`);
+        console.log(`📥 [CACHE] Fetching documents for: ${category}`);
         
         try {
-          const response = await fetch(`${backendUrl}/documents_by_category/${encodeURIComponent(category)}`);
+          const url = `${backendUrl}/documents_by_category/${encodeURIComponent(category)}`;
+          console.log(`🌐 [CACHE] Request URL: ${url}`);
+          
+          const response = await fetch(url);
+          console.log(`📡 [CACHE] Response status for ${category}: ${response.status} ${response.statusText}`);
           
           if (response.ok) {
             const data: DocumentsResponse = await response.json();
+            console.log(`📄 [CACHE] Raw response data for ${category}:`, JSON.stringify(data, null, 2));
+            
             cacheData[category] = {
               documents: data.documents || [],
               count: (data.documents || []).length,
               lastUpdated: new Date().toISOString()
             };
-            console.log(`✅ Cached ${cacheData[category].count} documents for ${category}`);
+            console.log(`✅ [CACHE] Cached ${cacheData[category].count} documents for ${category}`);
           } else {
-            console.error(`❌ Failed to fetch ${category}:`, response.status);
+            const errorText = await response.text();
+            console.error(`❌ [CACHE] Failed to fetch ${category}: ${response.status} ${response.statusText}`);
+            console.error(`❌ [CACHE] Error response: ${errorText}`);
             cacheData[category] = { 
               documents: [], 
               count: 0, 
@@ -121,7 +129,7 @@ class DocumentCacheService {
             };
           }
         } catch (categoryError) {
-          console.error(`❌ Error fetching ${category}:`, categoryError);
+          console.error(`❌ [CACHE] Error fetching ${category}:`, categoryError);
           cacheData[category] = { 
             documents: [], 
             count: 0, 

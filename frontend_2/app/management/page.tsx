@@ -8,6 +8,7 @@ import { DocumentItem } from '@/components/Management/DocumentItem';
 import { UploadDocumentModal } from '@/components/Management/UploadDocumentModal';
 import { ManagementProvider, useManagement } from '@/context/ManagementContext';
 import DocumentCacheService from '@/services/DocumentCacheService';
+import { testBackendConnection, testDocumentsEndpoint } from '@/lib/testBackend';
 
 // Component that uses the cache
 function ViewingCategoryDocuments({ 
@@ -83,6 +84,21 @@ function ManagementPageContent() {
     const initCache = async () => {
       if (!DocumentCacheService.isCacheInitialized()) {
         console.log('🚀 Initializing cache on page load...');
+        
+        // Test backend connection first
+        const backendOk = await testBackendConnection();
+        if (!backendOk) {
+          console.error('❌ Backend connection failed, cannot initialize cache');
+          return;
+        }
+        
+        // Test documents endpoint
+        const documentsOk = await testDocumentsEndpoint();
+        if (!documentsOk) {
+          console.error('❌ Documents endpoint failed, cannot initialize cache');
+          return;
+        }
+        
         await DocumentCacheService.initializeCache();
         initializeCache(); // Update context state
       }
