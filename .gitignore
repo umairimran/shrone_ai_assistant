@@ -174,7 +174,7 @@ documents/**/*.pptx
 # CSV/TSV data files
 *.csv
 *.tsv
-
+project overview
 # Machine Learning models and large files
 *.bin
 *.model
