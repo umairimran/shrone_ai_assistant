@@ -89,12 +89,16 @@ class DocumentCacheService {
     const cacheData: CategoryData = {};
     
     try {
+      // Get backend URL from environment variable or use localhost for development
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      console.log(`🌐 Using backend URL: ${backendUrl}`);
+      
       // Call API for each category
       for (const category of categories) {
         console.log(`📥 Fetching documents for: ${category}`);
         
         try {
-          const response = await fetch(`http://localhost:8000/documents_by_category/${encodeURIComponent(category)}`);
+          const response = await fetch(`${backendUrl}/documents_by_category/${encodeURIComponent(category)}`);
           
           if (response.ok) {
             const data: DocumentsResponse = await response.json();

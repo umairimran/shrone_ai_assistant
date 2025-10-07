@@ -143,7 +143,9 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
         year: new Date(data.issueDate).getFullYear().toString()
       });
 
-      const response = await fetch('http://localhost:8000/v1/upload-and-preprocess', {
+      // Get backend URL from environment variable
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/v1/upload-and-preprocess`, {
         method: 'POST',
         body: formData,
       });
@@ -178,7 +180,7 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('❌ Upload error:', error);
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.error('❌ Network error - is the backend server running on localhost:8000?');
+        console.error('❌ Network error - is the backend server running?');
       }
       return 'failed';
     }
@@ -192,7 +194,9 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       formData.append('document_title', documentTitle);
       formData.append('category', category);
 
-      const response = await fetch('http://localhost:8000/v1/delete-document', {
+      // Get backend URL from environment variable
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/v1/delete-document`, {
         method: 'DELETE',
         body: formData,
       });
