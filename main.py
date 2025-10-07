@@ -917,12 +917,17 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Frontend URLs
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000",
+        "http://34.229.232.41:3000",  # Your deployed frontend
+        "https://34.229.232.41:3000",  # HTTPS version
+        "*"  # Allow all origins for deployment flexibility
+    ],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly allow OPTIONS
     allow_headers=["*"],  # Allow all headers
 )
-
 
 # Custom exception handlers
 @app.exception_handler(RequestValidationError)
