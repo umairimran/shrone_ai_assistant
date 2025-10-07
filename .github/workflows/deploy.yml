@@ -22,7 +22,11 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             cd /home/ubuntu/Shrone_Agent
-            git pull origin main
+            # ⚡ Reset any local changes and clean untracked files
+            git fetch origin
+            git reset --hard origin/main
+            git clean -fd
+            # Rebuild and restart Docker containers
             docker-compose down
             docker-compose up -d --build
           EOF
