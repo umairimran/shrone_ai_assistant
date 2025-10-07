@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import DocumentCacheService from '@/services/DocumentCacheService';
 import { DocumentCategory, UploadedDoc, DocumentUploadData } from '@/lib/types';
+import { config } from '@/lib/config';
 
 interface ManagementContextValue {
   isCacheReady: boolean;
@@ -143,8 +144,8 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
         year: new Date(data.issueDate).getFullYear().toString()
       });
 
-      // Get backend URL from environment variable
-      const backendUrl = (typeof window !== 'undefined' ? (window as any).ENV?.NEXT_PUBLIC_BACKEND_URL : process.env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:8000';
+      // Get backend URL from config
+      const backendUrl = config.backendUrl;
       const response = await fetch(`${backendUrl}/v1/upload-and-preprocess`, {
         method: 'POST',
         body: formData,
@@ -194,8 +195,8 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       formData.append('document_title', documentTitle);
       formData.append('category', category);
 
-      // Get backend URL from environment variable
-      const backendUrl = (typeof window !== 'undefined' ? (window as any).ENV?.NEXT_PUBLIC_BACKEND_URL : process.env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:8000';
+      // Get backend URL from config
+      const backendUrl = config.backendUrl;
       const response = await fetch(`${backendUrl}/v1/delete-document`, {
         method: 'DELETE',
         body: formData,

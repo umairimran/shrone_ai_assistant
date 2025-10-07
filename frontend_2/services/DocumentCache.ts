@@ -1,6 +1,7 @@
 'use client';
 
 import { Document, DocumentsResponse } from '@/lib/types';
+import { config, debugConfig } from '@/lib/config';
 
 interface CategoryData {
   [category: string]: {
@@ -86,11 +87,14 @@ class DocumentCacheService {
   static async initializeCache(): Promise<void> {
     console.log('🔄 INITIALIZING CACHE - Calling all category APIs...');
     
+    // Debug environment variables
+    debugConfig();
+    
     const cacheData: CategoryData = {};
     
     try {
-      // Get backend URL from environment variable or use localhost for development
-      const backendUrl = (typeof window !== 'undefined' ? (window as any).ENV?.NEXT_PUBLIC_BACKEND_URL : process.env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:8000';
+      // Get backend URL from config
+      const backendUrl = config.backendUrl;
       console.log(`🌐 Using backend URL: ${backendUrl}`);
       
       // Call API for each category
