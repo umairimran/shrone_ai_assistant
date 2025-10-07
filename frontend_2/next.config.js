@@ -37,7 +37,9 @@ const nextConfig = {
   transpilePackages: ['react-pdf'],
 
   allowedDevOrigins: [
-    'http://34.229.232.41:3000', // replace with your EC2 public IP
+    'http://34.229.232.41:3000', // with port 3000
+    'http://34.229.232.41',      // without port
+    '34.229.232.41',             // just IP
   ],
 };
 
