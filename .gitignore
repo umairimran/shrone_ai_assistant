@@ -155,6 +155,8 @@ documents/**/*.pptx
 *.ico
 *.webp
 
+/home/shahzad/Work/JACK/Shrone_Agent/documents
+documents/Board and Committee Proceedings
 # Large data files
 *.zip
 *.rar
