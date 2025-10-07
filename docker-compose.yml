@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shrone-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env
+    volumes:
+      - ./documents:/app/documents:ro
+      - ./processed_output:/app/processed_output
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend_2
+      dockerfile: Dockerfile
+    container_name: shrone-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+
