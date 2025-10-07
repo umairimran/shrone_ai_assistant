@@ -114,7 +114,80 @@ transformers_cache/
 
 # Supabase local
 .supabase/
-documents
+
+# Large documents and media files
+*.pdf
+*.docx
+*.doc
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+# Keep documents structure but ignore large files
+!documents/
+!documents/**/
+documents/**/*.pdf
+documents/**/*.docx
+documents/**/*.doc
+documents/**/*.ppt
+documents/**/*.pptx
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.svg
+*.ico
+*.webp
+
+# Large data files
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.bz2
+*.xz
+*.pickle
+*.pkl
+*.h5
+*.hdf5
+*.parquet
+# Large CSV/data files only (keep config JSONs)
+**/processed_output/**/*.json
+**/logs/**/*.json
+# CSV/TSV data files
+*.csv
+*.tsv
+
+# Machine Learning models and large files
+*.bin
+*.model
+*.weights
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.msgpack
+
+# Database files that can be large
+*.sqlite-wal
+*.sqlite-shm
 # === frontend_2 (Next.js/React) ===
 # Note: frontend_2/ also has its own .gitignore
 
