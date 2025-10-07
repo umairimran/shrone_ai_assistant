@@ -22,8 +22,8 @@ services:
       - "3000:3000"
     environment:
       - NEXT_TELEMETRY_DISABLED=1
-      - BACKEND_URL=http://http://34.229.232.41/:8000
-      - NEXT_PUBLIC_BACKEND_URL=http://http://34.229.232.41/:8000
+      - BACKEND_URL=http://34.229.232.41/:8000
+      - NEXT_PUBLIC_BACKEND_URL=http://34.229.232.41/:8000
     depends_on:
       - backend
     restart: unless-stopped
