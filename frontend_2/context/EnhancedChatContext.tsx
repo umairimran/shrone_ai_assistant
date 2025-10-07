@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatMessage, ChatSessionState, Citation, UploadedDoc, ConversationSummary, ChatSession } from '@/lib/types';
-import { getDocTypeFromFile, prefersReducedMotion, toMB } from '@/lib/utils';
+import { getDocTypeFromFile, prefersReducedMotion, toMB, generateUUID } from '@/lib/utils';
 
 // Enhanced interface that includes conversation management
 interface EnhancedChatContextValue extends ChatSessionState {
@@ -296,7 +296,7 @@ export function EnhancedChatProvider({ children }: { children: React.ReactNode }
       if (!trimmed) return;
 
       const userMessage: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         role: 'user',
         content: trimmed,
         createdAt: new Date().toISOString()
@@ -354,7 +354,7 @@ export function EnhancedChatProvider({ children }: { children: React.ReactNode }
         })) : [];
 
         const assistantMessage: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           role: 'assistant',
           content: data.answer ?? '',
           createdAt: new Date().toISOString(),
@@ -368,7 +368,7 @@ export function EnhancedChatProvider({ children }: { children: React.ReactNode }
       } catch (error) {
         console.error('sendMessage error', error);
         const fallback: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           role: 'assistant',
           content: 'Sorry, something went wrong. Please try again later.',
           createdAt: new Date().toISOString(),
@@ -401,7 +401,7 @@ export function EnhancedChatProvider({ children }: { children: React.ReactNode }
       }
 
       const uploadingDocs: UploadedDoc[] = fileArray.map((file) => ({
-        id: `upload-${crypto.randomUUID()}`,
+        id: `upload-${generateUUID()}`,
         name: file.name,
         sizeMB: Number(toMB(file.size).toFixed(1)),
         type: getDocTypeFromFile(file) ?? 'pdf',
@@ -480,7 +480,7 @@ export function EnhancedChatProvider({ children }: { children: React.ReactNode }
 
   // New conversation management functions
   const startNewConversation = useCallback(() => {
-    const newConversationId = `conversation-${crypto.randomUUID()}`;
+    const newConversationId = `conversation-${generateUUID()}`;
     const now = new Date().toISOString();
     
     const newConversation: ChatSession = {
