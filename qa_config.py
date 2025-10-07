@@ -7,7 +7,7 @@ RETRIEVAL_BACKEND = "supabase"
 # Canonical categories (must match your ingestion)
 CATEGORIES = [
     "Board and Committee Proceedings",
-    "By-Laws & Governance Policies",
+    "Bylaws & Governance Policies",
     "External Advocacy &  Communications",  # Note: two spaces before Communications
     "Policy & Position Statements",
     "Resolutions",
@@ -16,7 +16,7 @@ CATEGORIES = [
 # Supabase table mapping by category
 SUPABASE_TABLE_BY_CATEGORY = {
     "Board and Committee Proceedings": "vs_board_committees",
-    "By-Laws & Governance Policies": "vs_bylaws",
+    "Bylaws & Governance Policies": "vs_bylaws",
     "External Advocacy &  Communications": "vs_external_advocacy",  # Note: two spaces before Communications
     "Policy & Position Statements": "vs_policy_positions",
     "Resolutions": "vs_resolutions",

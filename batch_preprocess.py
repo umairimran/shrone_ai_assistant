@@ -15,7 +15,7 @@ BATCH_SIZE = 1  # Process one at a time for better error tracking
     # Valid ACEP categories (must match exactly)
 VALID_CATEGORIES = {
         "Resolutions",
-        "By-Laws & Governance Policies",
+        "Bylaws & Governance Policies",
         "Board and Committee Proceedings",
         "Policy & Position Statements",
         "External Advocacy & Communications"   # fixed spacing & exact text

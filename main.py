@@ -736,10 +736,17 @@ async def delete_document_embeddings(document_title: str, category: str) -> dict
 # === Q&A MODELS AND FUNCTIONS ===
 
 from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="Either 'user' or 'assistant'")
+    content: str = Field(..., min_length=1)
+    timestamp: Optional[str] = Field(None)
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=3)
     category: str = Field(..., description="Must be one of the 5 canonical categories")
+    conversation_history: Optional[List[ChatMessage]] = Field(default=[], description="Previous conversation messages for context")
     top_k: Optional[int] = Field(None, ge=1, le=20, description="Max passages to retrieve")
 
 class AskResponse(BaseModel):
@@ -751,23 +758,31 @@ if QA_AVAILABLE and os.getenv("OPENAI_API_KEY"):
     EMB = OpenAIEmbeddings(model="text-embedding-3-small")
     LLM = ChatOpenAI(model=ANSWER_MODEL, temperature=0)
     
-    SYSTEM = """You are an accuracy-first assistant. 
-Answer ONLY using the provided context. If the answer is not present, say: 
-"I don't have that information in the provided documents."
+    SYSTEM = """You are a helpful, conversational assistant with access to organizational documents. You maintain context throughout the conversation and can respond to follow-up questions naturally.
 
-Rules:
-- Do not use outside knowledge.
-- Keep answers concise and quote key language when relevant.
-- Always add short inline citations like (Title; Category; heading).
+Core Capabilities:
+- Answer questions using the provided document context
+- Maintain conversation flow and understand references to previous responses
+- Handle conversational queries like "summarize them", "explain it", "tell me more"
+- Provide helpful, detailed responses while staying document-focused
+
+Response Guidelines:
+- Always prioritize information from the provided documents
+- Use conversation history to understand contextual references (like "them", "it", "those")
+- Be conversational and helpful while remaining accurate
+- If specific information isn't in the documents, acknowledge this but still try to be helpful with what you do have
+- When users ask for summaries, explanations, or elaborations of previous responses, provide them
 """
 
     HUMAN = """Category: {category}
-User question: {question}
+Current question: {question}
 
-Context:
+{conversation_context}
+
+Document Context:
 {context}
 
-Write the best possible answer strictly from the context. If not found, say you don't have it.
+Respond naturally and conversationally. Use the conversation history to understand what the user is referring to (like "them", "it", "those"). If they're asking for a summary, explanation, or follow-up about something from the conversation history, provide that based on both the history and any relevant document context.
 
 IMPORTANT: Do NOT include any inline citations or parenthetical references in your answer text. Keep the answer clean and readable.
 
@@ -776,13 +791,7 @@ After your answer, provide citations in this exact format:
 Citations:
 1. Title: [exact document title] | Category: [category] | Section: [main section - subheading if available] | Date: [document issued date if available]
 
-For sections, include both main heading and subheading when available, separated by " - " (dash with spaces).
-
-Example:
-Consulting services should respond to emergency department consultation requests within a reasonable time frame, generally within 30 minutes for urgent cases.
-
-Citations:
-1. Title: Specialty Consult Time and Documentation Expectations | Category: Policy & Position Statements | Section: Key Principles - Emergency Physician Authority | Date: 2024-03-15"""
+For sections, include both main heading and subheading when available, separated by " - " (dash with spaces)."""
 
     PROMPT = ChatPromptTemplate.from_messages([
         ("system", SYSTEM),
@@ -1799,6 +1808,52 @@ async def ask_question(req: AskRequest):
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(500, "OpenAI API key not configured")
 
+    # Handle greetings and casual interactions
+    question_lower = req.question.lower().strip()
+    greeting_patterns = [
+        'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening',
+        'how are you', 'how do you do', 'greetings', 'what\'s up', 'whats up'
+    ]
+    
+    if any(pattern in question_lower for pattern in greeting_patterns) and len(req.question.strip()) < 50:
+        greeting_responses = [
+            "Hi! How can I assist you today? I can help you find information from our organizational documents.",
+            "Hello! I'm here to help you with questions about our policies, resolutions, and other organizational documents. What would you like to know?",
+            "Greetings! I can help you search through our document library and answer questions about policies, procedures, and organizational matters. How may I assist you?",
+        ]
+        # Use a consistent response based on question to avoid randomness
+        response_index = len(question_lower) % len(greeting_responses)
+        return AskResponse(
+            answer=greeting_responses[response_index],
+            citations=[]
+        )
+
+    # Check for context-dependent questions when no conversation history exists
+    context_dependent_phrases = [
+        'last message', 'previous question', 'what did i', 'before this', 'earlier',
+        'my last', 'i asked', 'i said', 'you said', 'we discussed', 'you mentioned',
+        'what was the last', 'previous', 'before'
+    ]
+    
+    # If this looks like a context-dependent question but we have no conversation history
+    if not req.conversation_history or len(req.conversation_history) == 0:
+        if any(phrase in question_lower for phrase in context_dependent_phrases):
+            # Check if it's specifically asking about previous conversation
+            conversation_phrases = ['last message', 'previous question', 'what did i', 'i asked', 'you said', 'we discussed', 'what was the last']
+            if any(phrase in question_lower for phrase in conversation_phrases):
+                return AskResponse(
+                    answer="This appears to be the start of our conversation, so there's no previous message history to reference. Feel free to ask me any questions about your organizational documents, policies, resolutions, or procedures! I'm here to help you find the information you need.",
+                    citations=[]
+                )
+            
+            # For other context-dependent words like "them", "those", "it", ask for clarification
+            pronoun_phrases = ['them', 'those', 'it', 'this', 'that', 'these']
+            if any(word in question_lower.split() for word in pronoun_phrases):
+                return AskResponse(
+                    answer="I'd be happy to help! Could you please be more specific about what you're referring to? Since this is the beginning of our conversation, I don't have previous context to reference. Feel free to ask about any specific documents, policies, or topics you're interested in.",
+                    citations=[]
+                )
+
     # normalize / validate category the same way as before
     category = validate_qa_category(req.category)
 
@@ -1806,22 +1861,47 @@ async def ask_question(req: AskRequest):
     retriever = get_retriever(category)
     k = req.top_k or TOP_K
 
+    # Build conversation context from history
+    conversation_context = ""
+    if req.conversation_history and len(req.conversation_history) > 0:
+        conversation_context = "Previous conversation:\n"
+        # Include last few messages for context (max 10 messages or 2000 chars)
+        recent_messages = req.conversation_history[-10:]  # Last 10 messages
+        context_chars = 0
+        
+        for msg in recent_messages:
+            msg_text = f"{msg.role.capitalize()}: {msg.content}\n"
+            if context_chars + len(msg_text) > 2000:  # Limit context size
+                break
+            conversation_context += msg_text
+            context_chars += len(msg_text)
+        conversation_context += "\n"
+    else:
+        conversation_context = ""
+
     # OVER-FETCH then slice: let retriever return many candidates, then take top k
     all_docs = retriever.get_relevant_documents(req.question)
     if not all_docs:
-        return AskResponse(answer="I don't have that information in the provided documents.", citations=[])
+        # Check if this is a contextual query that might not need new documents
+        if req.conversation_history and any(word in req.question.lower() for word in ['summarize', 'explain', 'tell me more', 'elaborate', 'them', 'those', 'it', 'that']):
+            # This looks like a follow-up question - use conversation context even without new docs
+            ctx = "No additional document context found, but using conversation history for response."
+        else:
+            return AskResponse(answer="I don't have that information in the provided documents.", citations=[])
+    else:
+        ctx = format_context(all_docs)
 
     # debug: (optional) log how many were returned
     # print("retriever returned total:", len(all_docs))
 
-    docs = all_docs # send top k to LLM
+    docs = all_docs  # send top k to LLM
 
     # Call LLM and get raw content
-    ctx = format_context(docs)
     chain = PROMPT | LLM
     raw_resp = chain.invoke({
         "category": category,
         "question": req.question,
+        "conversation_context": conversation_context,
         "context": ctx
     })
     ans = raw_resp.content if hasattr(raw_resp, "content") else str(raw_resp)

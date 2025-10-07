@@ -27,7 +27,7 @@ export function SearchFilters({
   onFilteredDocuments,
   categories = [
     'Board and Committee Proceedings',
-    'By-Laws & Governance Policies',
+    'Bylaws & Governance Policies',
     'External Advocacy &  Communications',
     'Policy & Position Statements',
     'Resolutions'

@@ -57,7 +57,7 @@ folders.db
 
 # Output and cache files
 preprocessed_output/
-*.json
+
 !requirements.json
 *.pkl
 *.pickle
@@ -134,7 +134,7 @@ out/
 # Next.js cache
 frontend_2/.swc/
 .swc/
-
+processed_output
 # Production builds
 frontend_2/build/
 frontend_2/dist/

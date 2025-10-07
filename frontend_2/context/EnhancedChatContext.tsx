@@ -309,6 +309,13 @@ export function EnhancedChatProvider({ children }: { children: React.ReactNode }
       }));
 
       try {
+        // Prepare conversation history for context (exclude the current message)
+        const conversationHistory = state.messages.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.createdAt
+        }));
+
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: {
@@ -316,7 +323,8 @@ export function EnhancedChatProvider({ children }: { children: React.ReactNode }
           },
           body: JSON.stringify({
             question: trimmed,
-            category: state.activeCategory
+            category: state.activeCategory,
+            conversation_history: conversationHistory
           })
         });
 

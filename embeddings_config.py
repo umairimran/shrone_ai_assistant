@@ -8,7 +8,7 @@ Supabase table routing, and embedding parameters as specified in Phase 3.
 # Category mapping from folder names to canonical category names
 CATEGORY_MAP = {
     "Board_and_Committee_Proceedings": "Board and Committee Proceedings",
-    "By-Laws_Governance_Policies": "By-Laws & Governance Policies", 
+    "By-Laws_Governance_Policies": "Bylaws & Governance Policies", 
     "External_Advocacy_Communications": "External Advocacy &  Communications",
     "Policy_Position_Statements": "Policy & Position Statements",
     "Resolutions": "Resolutions",
@@ -17,7 +17,7 @@ CATEGORY_MAP = {
 # Supabase table mapping by category
 SUPABASE_TABLE_BY_CATEGORY = {
     "Board and Committee Proceedings": "vs_board_committees",
-    "By-Laws & Governance Policies": "vs_bylaws",
+    "Bylaws & Governance Policies": "vs_bylaws",
     "External Advocacy &  Communications": "vs_external_advocacy", 
     "Policy & Position Statements": "vs_policy_positions",
     "Resolutions": "vs_resolutions",

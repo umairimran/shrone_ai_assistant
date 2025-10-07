@@ -25,7 +25,7 @@ const defaultCategories: DocumentCategory[] = [
   },
   {
     id: 'bylaws-governance',
-    name: 'By-Laws & Governance Policies',
+    name: 'Bylaws & Governance Policies',
     description: 'Organizational bylaws and governance policies',
     documentCount: 0
   },

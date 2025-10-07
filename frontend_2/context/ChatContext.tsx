@@ -8,6 +8,7 @@ interface ChatContextValue extends ChatSessionState {
   setActiveDocument: (_id: string | null) => void;
   setActiveCategory: (_category: string) => void;
   sendMessage: (_text: string) => Promise<void>;
+  clearChat: () => void;
   deleteDocument: (_id: string) => void;
   uploadFiles: (_files: FileList | File[]) => Promise<'ok' | 'invalid' | 'failed'>;
 }
@@ -164,6 +165,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const clearChat = useCallback(() => {
+    setState((prev) => {
+      // Clear messages for current document
+      persistMessages(prev.activeDocumentId, []);
+      return {
+        ...prev,
+        messages: [],
+        isAssistantTyping: false
+      };
+    });
+  }, []);
+
   const deleteDocument = useCallback((id: string) => {
     setState((prev) => {
       const remainingDocs = prev.documents.filter((doc) => doc.id !== id);
@@ -216,6 +229,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       });
 
       try {
+        // Prepare conversation history for context (exclude the current message)
+        const conversationHistory = state.messages.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.createdAt
+        }));
+
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: {
@@ -223,7 +243,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           },
           body: JSON.stringify({
             question: trimmed,
-            category: state.activeCategory
+            category: state.activeCategory,
+            conversation_history: conversationHistory
           })
         });
 
@@ -372,10 +393,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setActiveDocument,
       setActiveCategory,
       sendMessage,
+      clearChat,
       deleteDocument,
       uploadFiles
     }),
-    [deleteDocument, sendMessage, setActiveCategory, setActiveDocument, state, uploadFiles]
+    [deleteDocument, sendMessage, setActiveCategory, setActiveDocument, clearChat, state, uploadFiles]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

@@ -6,7 +6,7 @@ import { useEnhancedChat } from '@/context/EnhancedChatContext';
 
 const categories = [
   'Board and Committee Proceedings',
-  'By-Laws & Governance Policies',
+  'Bylaws & Governance Policies',
   'External Advocacy &  Communications',
   'Policy & Position Statements',
   'Resolutions'

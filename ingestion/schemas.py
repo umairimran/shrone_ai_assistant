@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, validator
 # Exact 5 categories as specified - matching actual folder names
 CATEGORIES = {
     "Resolutions",
-    "By-Laws & Governance Policies", 
+    "Bylaws & Governance Policies", 
     "Board and Committee Proceedings",
     "Policy & Position Statements",
     "External Advocacy &  Communications"

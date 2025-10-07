@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS vs_board_committees (
   embedding vector(1536)          -- OpenAI text-embedding-3-small (1536 dimensions, faster & cheaper)
 );
 
--- Table 2: By-Laws & Governance Policies  
+-- Table 2: Bylaws & Governance Policies  
 CREATE TABLE IF NOT EXISTS vs_bylaws (
   id text PRIMARY KEY,            -- chunk_id = sha256(text)
   content text NOT NULL,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS vs_resolutions (
 CREATE INDEX IF NOT EXISTS vs_board_committees_embedding_idx 
 ON vs_board_committees USING hnsw (embedding vector_cosine_ops);
 
--- By-Laws & Governance Policies
+-- Bylaws & Governance Policies
 CREATE INDEX IF NOT EXISTS vs_bylaws_embedding_idx 
 ON vs_bylaws USING hnsw (embedding vector_cosine_ops);
 
@@ -108,7 +108,7 @@ BEGIN
 END;
 $$;
 
--- Search function for By-Laws & Governance Policies
+-- Search function for Bylaws & Governance Policies
 CREATE OR REPLACE FUNCTION search_bylaws(
   query_embedding vector(1536),
   match_threshold float DEFAULT 0.7,

@@ -1,9 +1,16 @@
 import process from 'process';
 import { NextResponse } from 'next/server';
 
+interface ChatMessage {
+  role: string;
+  content: string;
+  timestamp?: string;
+}
+
 interface AskRequestBody {
   question: string;
   category: string;
+  conversation_history?: ChatMessage[];
   top_k?: number;
 }
 
@@ -26,7 +33,12 @@ export async function POST(request: Request) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ question, category, top_k: body.top_k ?? 1 }),
+      body: JSON.stringify({ 
+        question, 
+        category, 
+        conversation_history: body.conversation_history || [],
+        top_k: body.top_k ?? 1 
+      }),
       cache: 'no-store'
     });
 

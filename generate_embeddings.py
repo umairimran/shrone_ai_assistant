@@ -46,7 +46,7 @@ SUPABASE_BATCH_SIZE = 100  # Upload to Supabase in batches
 # Category to table mapping
 CATEGORY_TABLE_MAP = {
     "Board and Committee Proceedings": "vs_board_committees",
-    "By-Laws & Governance Policies": "vs_bylaws", 
+    "Bylaws & Governance Policies": "vs_bylaws", 
     "External Advocacy & Communications": "vs_external_advocacy",
     "Policy & Position Statements": "vs_policy_positions",
     "Resolutions": "vs_resolutions"
@@ -55,7 +55,7 @@ CATEGORY_TABLE_MAP = {
 # Reverse mapping for folder names (slugified)
 FOLDER_CATEGORY_MAP = {
     "Board_and_Committee_Proceedings": "Board and Committee Proceedings",
-    "By-Laws_Governance_Policies": "By-Laws & Governance Policies",
+    "By-Laws_Governance_Policies": "Bylaws & Governance Policies",
     "External_Advocacy_Communications": "External Advocacy & Communications", 
     "Policy_Position_Statements": "Policy & Position Statements",
     "Resolutions": "Resolutions"
