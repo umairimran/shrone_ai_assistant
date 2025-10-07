@@ -144,7 +144,7 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       });
 
       // Get backend URL from environment variable
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = (typeof window !== 'undefined' ? (window as any).ENV?.NEXT_PUBLIC_BACKEND_URL : process.env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:8000';
       const response = await fetch(`${backendUrl}/v1/upload-and-preprocess`, {
         method: 'POST',
         body: formData,
@@ -195,7 +195,7 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       formData.append('category', category);
 
       // Get backend URL from environment variable
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = (typeof window !== 'undefined' ? (window as any).ENV?.NEXT_PUBLIC_BACKEND_URL : process.env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:8000';
       const response = await fetch(`${backendUrl}/v1/delete-document`, {
         method: 'DELETE',
         body: formData,

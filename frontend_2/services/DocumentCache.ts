@@ -90,7 +90,7 @@ class DocumentCacheService {
     
     try {
       // Get backend URL from environment variable or use localhost for development
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = (typeof window !== 'undefined' ? (window as any).ENV?.NEXT_PUBLIC_BACKEND_URL : process.env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:8000';
       console.log(`🌐 Using backend URL: ${backendUrl}`);
       
       // Call API for each category
