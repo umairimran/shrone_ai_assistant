@@ -9,6 +9,7 @@ import { UploadedFileItem } from '@/components/UploadedFileItem';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const categories = [
+  'All Categories',
   'Board and Committee Proceedings',
   'Bylaws & Governance Policies',
   'External Advocacy &  Communications',

@@ -62,7 +62,7 @@ const seedMessages: ChatMessage[] = [
   }
 ];
 
-const defaultCategory = 'Board and Committee Proceedings';
+const defaultCategory = 'All Categories';
 const defaultConversationId = 'default-conversation';
 
 const initialState: ChatSessionState = {

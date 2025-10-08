@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useEnhancedChat } from '@/context/EnhancedChatContext';
 
 const categories = [
+  'All Categories',
   'Board and Committee Proceedings',
   'Bylaws & Governance Policies',
   'External Advocacy &  Communications',

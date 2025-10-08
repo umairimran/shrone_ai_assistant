@@ -28,6 +28,7 @@ from ingestion.schemas import CATEGORIES, DocumentMeta, Chunk, PreprocessRespons
 from ingestion.extract import extract_pdf, extract_docx, extract_txt_md
 from ingestion.clean import normalize_pages, join_pages, filter_table_of_contents, clean_page_text
 from ingestion.structure import split_into_blocks
+from folder_router import FolderRouter, map_folder_to_category
 from ingestion.chunk import chunk_blocks, count_tokens as get_chunk_token_count
 from ingestion.metadata import (
     infer_title, infer_document_number, infer_issued_date, derive_year, 
@@ -758,21 +759,27 @@ if QA_AVAILABLE and os.getenv("OPENAI_API_KEY"):
     EMB = OpenAIEmbeddings(model="text-embedding-3-small")
     LLM = ChatOpenAI(model=ANSWER_MODEL, temperature=0)
     
-    SYSTEM = """You are a helpful, conversational assistant with access to organizational documents. You maintain context throughout the conversation and can respond to follow-up questions naturally.
+    SYSTEM = """You are Sharon, a helpful document analysis assistant for an emergency medicine organization. Your role is to understand user intent and provide helpful information from organizational documents.
 
-Core Capabilities:
-- Answer questions using the provided document context
-- Maintain conversation flow and understand references to previous responses
-- Handle conversational queries like "summarize them", "explain it", "tell me more"
-- Provide helpful, detailed responses while staying document-focused
-
-Response Guidelines:
+Core Principles:
+- Interpret ALL user inputs as questions or requests for information, even if informal or incomplete
+- Never require specific prefixes like "Give me the answer" - respond helpfully to any query
+- Understand the user's intent even with casual language like "workplace violence policy" or "council resolutions from 2025"
 - Always prioritize information from the provided documents
-- Use conversation history to understand contextual references (like "them", "it", "those")
-- Be conversational and helpful while remaining accurate
-- If specific information isn't in the documents, acknowledge this but still try to be helpful with what you do have
-- When users ask for summaries, explanations, or elaborations of previous responses, provide them
-"""
+- Be conversational and natural while staying focused on the documents
+
+Response Approach:
+- Answer questions directly using document context
+- Maintain conversation flow and understand references to previous responses  
+- Handle follow-up questions naturally (like "summarize them", "explain it", "tell me more")
+- If specific information isn't in the documents, acknowledge this but provide what you can
+- For ambiguous queries, provide comprehensive information from relevant documents
+
+Document Focus:
+- Use the provided document context as your primary information source
+- When users ask about policies, procedures, resolutions, etc., search the documents thoroughly
+- Provide detailed, helpful responses with specific information from the documents
+- Include relevant details, dates, and context when available"""
 
     HUMAN = """Category: {category}
 Current question: {question}
@@ -802,6 +809,10 @@ else:
 
 def validate_qa_category(cat: str) -> str:
     """Validate Q&A category with normalization"""
+    # Handle "All Categories" special case
+    if cat.strip() == "All Categories":
+        return "All Categories"
+    
     # Normalize spaces and common variations
     normalized = cat.replace("By-Laws", "Bylaws").strip()
     normalized = " ".join(normalized.split())  # Normalize multiple spaces to single space
@@ -819,7 +830,7 @@ def validate_qa_category(cat: str) -> str:
         if normalized.replace(" & ", " &  ") == valid_cat or normalized.replace(" &  ", " & ") == valid_cat:
             return valid_cat
     
-    raise HTTPException(400, f"Invalid category. Must be one of: {QA_CATEGORIES}")
+    raise HTTPException(400, f"Invalid category. Must be one of: {['All Categories'] + QA_CATEGORIES}")
 
 def load_supabase_retriever(category: str):
     """Load Supabase retriever for category using direct RPC calls"""
@@ -889,10 +900,86 @@ def load_supabase_retriever(category: str):
     
     return SupabaseCustomRetriever(client, EMB, search_function)
 
+def load_supabase_all_categories_retriever():
+    """Load Supabase retriever that searches across all categories"""
+    if not QA_AVAILABLE:
+        raise HTTPException(500, "Q&A functionality not available - missing dependencies")
+    
+    try:
+        from supabase import create_client
+        from langchain_community.vectorstores import SupabaseVectorStore
+    except ImportError:
+        raise HTTPException(500, "Supabase dependencies not available")
+    
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+    if not url or not key:
+        raise HTTPException(500, "Supabase credentials not configured")
+    
+    client = create_client(url, key)
+    
+    # Create a combined retriever that searches across all category tables
+    class AllCategoriesRetriever:
+        def __init__(self, client, embeddings, category_tables):
+            self.client = client
+            self.embeddings = embeddings
+            self.category_tables = category_tables
+        
+        def get_relevant_documents(self, query: str, k: int = None):
+            """Search across all category tables and combine results"""
+            if k is None:
+                k = TOP_K
+            
+            all_docs = []
+            docs_per_category = max(1, k // len(self.category_tables))  # Distribute k across categories
+            
+            for category, table_name in self.category_tables.items():
+                try:
+                    # Create vector store for this category
+                    vector_store = SupabaseVectorStore(
+                        client=self.client,
+                        embedding=self.embeddings,
+                        table_name=table_name,
+                        query_name=f"match_documents_{table_name}"
+                    )
+                    
+                    # Get documents from this category
+                    category_docs = vector_store.similarity_search(query, k=docs_per_category)
+                    
+                    # Add category info to metadata if missing
+                    for doc in category_docs:
+                        if not doc.metadata.get('category'):
+                            doc.metadata['category'] = category
+                    
+                    all_docs.extend(category_docs)
+                    
+                except Exception as e:
+                    print(f"Warning: Failed to search category {category}: {e}")
+                    continue
+            
+            # Remove duplicates based on content similarity and re-rank
+            unique_docs = []
+            seen_content = set()
+            
+            for doc in all_docs:
+                # Create a simple hash of the content for deduplication
+                content_hash = hash(doc.page_content[:200])  # Use first 200 chars for dedup
+                if content_hash not in seen_content:
+                    seen_content.add(content_hash)
+                    unique_docs.append(doc)
+            
+            # Return top k documents (re-ranked by original similarity scores if available)
+            return unique_docs[:k]
+    
+    return AllCategoriesRetriever(client, EMB, SUPABASE_TABLE_BY_CATEGORY)
+
 def get_retriever(category: str):
-    """Get retriever based on configured backend"""
+    """Get retriever based on configured backend and category"""
     if RETRIEVAL_BACKEND == "supabase":
-        return load_supabase_retriever(category)
+        if category == "All Categories":
+            return load_supabase_all_categories_retriever()
+        else:
+            return load_supabase_retriever(category)
     else:
         raise HTTPException(500, f"Unsupported RETRIEVAL_BACKEND: {RETRIEVAL_BACKEND}")
 
@@ -1812,15 +1899,29 @@ async def ask_question(req: AskRequest):
         raise HTTPException(500, "Q&A functionality not available - missing dependencies")
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(500, "OpenAI API key not configured")
-
-    # Handle greetings and casual interactions
+    
+    # Handle greetings and casual interactions - ONLY pure greetings
     question_lower = req.question.lower().strip()
-    greeting_patterns = [
-        'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening',
-        'how are you', 'how do you do', 'greetings', 'what\'s up', 'whats up'
+    
+    # Much more specific greeting detection - only catch standalone greetings
+    standalone_greetings = [
+        'hi', 'hello', 'hey', 'hi there', 'hello there',
+        'good morning', 'good afternoon', 'good evening', 'good day',
+        'how are you', 'how do you do', 'how are things',
+        'greetings', 'what\'s up', 'whats up', 'sup',
+        'hi!', 'hello!', 'hey!', 'hi.', 'hello.', 'hey.'
     ]
     
-    if any(pattern in question_lower for pattern in greeting_patterns) and len(req.question.strip()) < 50:
+    # Only respond with greeting if:
+    # 1. The query exactly matches a greeting (with optional punctuation)
+    # 2. OR it's a very short query (< 25 chars) that's mostly a greeting
+    is_pure_greeting = (
+        question_lower in standalone_greetings or
+        question_lower.rstrip('!.?') in standalone_greetings or
+        (len(req.question.strip()) < 25 and any(req.question.strip().lower() == pattern for pattern in standalone_greetings))
+    )
+    
+    if is_pure_greeting:
         greeting_responses = [
             "Hi! How can I assist you today? I can help you find information from our organizational documents.",
             "Hello! I'm here to help you with questions about our policies, resolutions, and other organizational documents. What would you like to know?",
@@ -1859,8 +1960,62 @@ async def ask_question(req: AskRequest):
                     citations=[]
                 )
 
+    # QUERY PREPROCESSING: Enhance incomplete or informal queries
+    enhanced_question = req.question
+    
+    # Remove filler phrases and clean the query
+    filler_phrases = [
+        'give me the answer on ', 'give me the answer about ', 'give me the answer for ',
+        'give me the answer ', 'please tell me about ', 'please tell me ', 
+        'can you tell me about ', 'can you tell me ', 'i want to know about ', 
+        'i want to know ', 'i need to know about ', 'i need to know '
+    ]
+    
+    enhanced_lower = enhanced_question.lower()
+    for filler in filler_phrases:
+        if enhanced_lower.startswith(filler):
+            enhanced_question = enhanced_question[len(filler):].strip()
+            break
+    
+    # Auto-enhance statements to questions when no question mark present
+    if '?' not in enhanced_question and len(enhanced_question.strip()) > 0:
+        # Check if it's already a clear question pattern
+        question_starters = ['what', 'how', 'when', 'where', 'why', 'which', 'who', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does', 'did']
+        first_word = enhanced_question.strip().split()[0].lower() if enhanced_question.strip() else ""
+        
+        if first_word not in question_starters:
+            # Convert statement to question format
+            enhanced_question = f"What does the document say about {enhanced_question.strip()}?"
+    
+    # Use the enhanced question for processing
+    original_question = req.question
+    req.question = enhanced_question
+    
     # normalize / validate category the same way as before
     category = validate_qa_category(req.category)
+
+    # INTELLIGENT ROUTING: If "All Categories" is selected, use GPT to classify query
+    if category == "All Categories":
+        try:
+            # Initialize folder router
+            folder_router = FolderRouter()
+            
+            # Route the query to get the most relevant folder(s)
+            routing_result = folder_router.route_query(req.question)
+            
+            if "error" not in routing_result and routing_result.get("selected_folders"):
+                # Get the primary folder (first one if multiple)
+                primary_folder = routing_result["selected_folders"][0]
+                # Map folder name to category display name
+                category = map_folder_to_category(primary_folder)
+                print(f"🎯 Query classified to category: {category} (from folder: {primary_folder})")
+            else:
+                # If routing fails, fall back to all categories search
+                print(f"⚠️ Routing failed: {routing_result.get('error', 'Unknown error')}")
+                category = "All Categories"  # Keep original selection
+        except Exception as e:
+            print(f"⚠️ Routing error: {e}")
+            category = "All Categories"  # Fall back to all categories search
 
     # get retriever
     retriever = get_retriever(category)
@@ -2013,7 +2168,7 @@ async def ask_question(req: AskRequest):
     # First, use citations extracted from structured Citations section
     for citation_data in citations_extracted:
         title = citation_data["title"]
-        category = citation_data["category"] 
+        category = citation_data["category"]
         section = citation_data["section"]
         date = citation_data["date"]
         
