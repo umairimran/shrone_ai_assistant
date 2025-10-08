@@ -3,9 +3,11 @@
 import React, { useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { cn } from '@/lib/utils';
+import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 
 interface AnswerContentProps {
-  html: string;
+  html?: string;
+  markdown?: string;
   onCitationClick?: (_citationId: string) => void;
   className?: string;
 }
@@ -22,7 +24,33 @@ const purifyConfig = {
   ADD_ATTR: ['data-cite', 'data-citation-id']
 };
 
-export function AnswerContent({ html, onCitationClick, className }: AnswerContentProps) {
+export function AnswerContent({ html, markdown, onCitationClick, className }: AnswerContentProps) {
+  // Prefer markdown over HTML if both are provided
+  const content = markdown || html;
+  const isMarkdown = !!markdown;
+
+  // If we have markdown content, use MarkdownRenderer
+  if (isMarkdown) {
+    return (
+      <MarkdownRenderer
+        content={content || ''}
+        onCitationClick={onCitationClick}
+        className={className}
+      />
+    );
+  }
+
+  // If we have HTML content, use HTML rendering
+  if (html) {
+    return <HtmlRenderer html={html} onCitationClick={onCitationClick} className={className} />;
+  }
+
+  // If no content, return empty
+  return null;
+}
+
+// Separate HTML renderer component
+function HtmlRenderer({ html, onCitationClick, className }: { html: string; onCitationClick?: (citationId: string) => void; className?: string }) {
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +83,7 @@ export function AnswerContent({ html, onCitationClick, className }: AnswerConten
 
   // Process HTML to enhance citation markers
   const processedHtml = React.useMemo(() => {
+    if (!html) return '';
     // First sanitize the HTML
     const sanitized = DOMPurify.sanitize(html, purifyConfig);
     
@@ -69,7 +98,7 @@ export function AnswerContent({ html, onCitationClick, className }: AnswerConten
     <div
       ref={contentRef}
       className={cn(
-        'prose prose-sm max-w-none',
+        'prose prose-sm max-w-none w-full',
         'prose-headings:text-gray-900 dark:prose-headings:text-gray-100',
         'prose-p:text-gray-700 dark:prose-p:text-gray-300',
         'prose-p:leading-7',

@@ -97,12 +97,12 @@ export function CitationCard({
               <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
                 {getCitationTitle(citation)}
               </h4>
-              {/* Display section information */}
-              {getCitationSection(citation) && (
+              {/* Display section information - COMMENTED OUT */}
+              {/* {getCitationSection(citation) && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Section: {getCitationSection(citation)}
                 </p>
-              )}
+              )} */}
               {/* Display legacy hierarchy path for backward compatibility */}
               {!getCitationSection(citation) && citation.hierarchy_path && (
                 <Tooltip 
@@ -127,37 +127,6 @@ export function CitationCard({
             </div>
           </div>
 
-          {/* Confidence Score */}
-          {citation.confidence_score !== undefined && (
-            <Tooltip
-              content={
-                <div className="text-center">
-                  <div className="font-semibold">Relevance Score</div>
-                  <div className="text-xs opacity-90 mt-1">
-                    {Math.round(citation.confidence_score * 100)}% confidence
-                  </div>
-                  <div className="text-xs opacity-75 mt-1">
-                    {citation.confidence_score >= 0.8 ? 'High relevance' :
-                     citation.confidence_score >= 0.6 ? 'Medium relevance' :
-                     'Lower relevance'}
-                  </div>
-                </div>
-              }
-              position="left"
-            >
-              <div className="flex items-center gap-1 cursor-help">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {Math.round(citation.confidence_score * 100)}%
-                </span>
-                <div className="w-12 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-blue-500 transition-all duration-300"
-                    style={{ width: `${citation.confidence_score * 100}%` }}
-                  />
-                </div>
-              </div>
-            </Tooltip>
-          )}
         </div>
 
         {/* Citation Metadata */}
@@ -209,11 +178,11 @@ export function CitationCard({
           )}
         </div>
 
-        {/* Quote */}
+        {/* Quote - Shortened version */}
         {citation.quote && (
           <blockquote className="border-l-3 border-blue-500 pl-3 py-1 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-r">
-            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic">
-              "{citation.quote}"
+            <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed italic line-clamp-2">
+              "{citation.quote.length > 150 ? citation.quote.substring(0, 150) + '...' : citation.quote}"
             </p>
           </blockquote>
         )}

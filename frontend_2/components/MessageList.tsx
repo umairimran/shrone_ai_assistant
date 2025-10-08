@@ -17,7 +17,7 @@ export function MessageList({ messages, isAssistantTyping }: MessageListProps) {
       className="scrollbar-thin flex-1 overflow-y-auto px-2 py-6 sm:px-6"
       aria-live="polite"
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      <div className="mx-auto flex max-w-4xl lg:max-w-5xl xl:max-w-6xl flex-col gap-6">
         {messages.map((message) => (
           <MessageItem key={message.id} message={message} />
         ))}

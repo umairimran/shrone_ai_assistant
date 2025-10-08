@@ -388,7 +388,7 @@ def map_folder_to_category(folder_name):
     """Map folder names to display category names."""
     folder_to_category = {
         "Board_and_Committee_Proceedings": "Board and Committee Proceedings",
-        "Bylaws_and_Governance_Policies": "By-Laws & Governance Policies",
+        "Bylaws_and_Governance_Policies": "Bylaws & Governance Policies",
         "External_Advocacy_and_Communications": "External Advocacy &  Communications",
         "Policy_and_Position_Statements": "Policy & Position Statements",
         "Resolutions": "Resolutions"
@@ -399,7 +399,7 @@ def map_category_to_folder(category_name):
     """Map display category names to folder names."""
     category_to_folder = {
         "Board and Committee Proceedings": "Board_and_Committee_Proceedings",
-        "By-Laws & Governance Policies": "Bylaws_and_Governance_Policies",
+        "Bylaws & Governance Policies": "Bylaws_and_Governance_Policies",
         "External Advocacy &  Communications": "External_Advocacy_and_Communications",
         "Policy & Position Statements": "Policy_and_Position_Statements",
         "Resolutions": "Resolutions"

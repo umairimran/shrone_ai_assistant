@@ -23,9 +23,9 @@ SUPABASE_TABLE_BY_CATEGORY = {
 }
 
 # Retrieval settings
-TOP_K = 10
-FETCH_K = 30        # for MMR diversity
-MMR_LAMBDA = 0.25
+TOP_K = 15
+FETCH_K = 40      # for MMR diversity
+MMR_LAMBDA = 0.2
 
 # LLM
 ANSWER_MODEL = "gpt-4o-mini"  # fast/accurate; set temperature=0 for determinism

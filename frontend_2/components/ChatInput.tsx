@@ -59,7 +59,7 @@ export function ChatInput() {
 
   return (
     <div className="sticky bottom-0 z-10 bg-white dark:bg-zinc-900 px-4 py-4 sm:px-6">
-      <div className="mx-auto flex max-w-3xl items-end gap-3">
+      <div className="mx-auto flex max-w-4xl lg:max-w-5xl xl:max-w-6xl items-end gap-3">
         <div
           className={cn(
             'flex-1 flex items-end rounded-xl transition-shadow duration-200 cursor-text',

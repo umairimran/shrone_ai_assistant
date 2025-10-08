@@ -254,7 +254,7 @@ export function MessageItem({ message }: MessageItemProps) {
       >
         {isUser ? 'Y' : 'AI'}
       </div>
-      <div className={cn('flex-1 min-w-0 max-w-[85%] sm:max-w-2xl', isUser ? 'text-right sm:text-left' : 'text-left')}>
+      <div className={cn('flex-1 min-w-0 max-w-[90%] sm:max-w-4xl lg:max-w-5xl xl:max-w-6xl', isUser ? 'text-right sm:text-left' : 'text-left')}>
         <div
           className={cn(
             'group relative rounded-xl px-4 py-3 border transition-colors',
@@ -280,62 +280,13 @@ export function MessageItem({ message }: MessageItemProps) {
                   )}
                 </div>
                 
-                {/* Render HTML content or fallback to parsed blocks */}
-                {hasHtmlContent ? (
-                  <AnswerContent 
-                    html={message.answer_html!} 
-                    onCitationClick={handleCitationClick}
-                    className="text-gray-900 dark:text-gray-100"
-                  />
-                ) : (
-                  <div className="space-y-2 text-sm leading-relaxed text-gray-900 dark:text-gray-100">
-                    {answerBlocks.length === 0 && (
-                      <p className="whitespace-pre-wrap">No answer available.</p>
-                    )}
-                    {answerBlocks.map((block, index) => {
-                      if (block.kind === 'paragraph') {
-                        return (
-                          <p key={`paragraph-${index}`} className="whitespace-pre-wrap">
-                            {block.text}
-                          </p>
-                        );
-                      }
-
-                      if (block.kind === 'unordered-list') {
-                        return (
-                          <ul
-                            key={`unordered-${index}`}
-                            className="ml-5 list-disc space-y-1 whitespace-normal text-gray-900 dark:text-gray-100"
-                          >
-                            {block.items.map((item, itemIndex) => (
-                              <li key={`unordered-${index}-${itemIndex}`}>{item}</li>
-                            ))}
-                          </ul>
-                        );
-                      }
-
-                      const listStyleType =
-                        block.listStyle === 'lower-alpha'
-                          ? 'lower-alpha'
-                          : block.listStyle === 'upper-alpha'
-                            ? 'upper-alpha'
-                            : 'decimal';
-
-                      return (
-                        <ol
-                          key={`ordered-${index}`}
-                          className="ml-5 space-y-1 whitespace-normal text-gray-900 dark:text-gray-100"
-                          style={{ listStyleType }}
-                          start={block.start}
-                        >
-                          {block.items.map((item, itemIndex) => (
-                            <li key={`ordered-${index}-${itemIndex}`}>{item}</li>
-                          ))}
-                        </ol>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* Render content using AnswerContent with markdown support */}
+                <AnswerContent 
+                  html={message.answer_html} 
+                  markdown={message.content}
+                  onCitationClick={handleCitationClick}
+                  className="text-gray-900 dark:text-gray-100"
+                />
               </div>
               
               {/* Enhanced Citations Display */}

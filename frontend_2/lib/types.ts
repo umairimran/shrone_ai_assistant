@@ -2,8 +2,8 @@
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string; // Plain text for user messages
-  answer_html?: string; // HTML with data-cite attributes for assistant
+  content: string; // Plain text for user messages, markdown for assistant
+  answer_html?: string; // HTML with data-cite attributes for assistant (fallback)
   createdAt: string;
   citations?: Citation[];
   processingStatus?: 'complete' | 'partial' | 'processing' | 'documents_processing' | 'citations_extracting' | 'validation_pending';

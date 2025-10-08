@@ -3,7 +3,7 @@ name: Deploy Shrone_Agent to EC2
 on:
   push:
     branches:
-      - main  # change if you use 'master' or 'dev'
+      - umair_branch  # change if you use 'master' or 'dev'
 
 jobs:
   deploy:

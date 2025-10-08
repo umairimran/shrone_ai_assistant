@@ -189,6 +189,11 @@ select:focus-visible,
   max-width: 65ch;
 }
 
+/* Override prose max-width for full-width content */
+.prose.max-w-none {
+  max-width: none;
+}
+
 .prose [class~="lead"] {
   color: rgb(var(--color-text-secondary));
 }

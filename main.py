@@ -779,7 +779,17 @@ Document Focus:
 - Use the provided document context as your primary information source
 - When users ask about policies, procedures, resolutions, etc., search the documents thoroughly
 - Provide detailed, helpful responses with specific information from the documents
-- Include relevant details, dates, and context when available"""
+- Include relevant details, dates, and context when available
+
+Formatting Requirements:
+- Format your response using Markdown syntax for better readability
+- Use headers (##, ###) to organize information clearly
+- Use bullet points (-) and numbered lists (1.) for structured information
+- Use **bold** for emphasis on key terms and concepts
+- Use > blockquotes for important quotes or policy statements
+- Use `code` formatting for specific terms, numbers, or technical references
+- Structure your response with clear sections and subsections
+- Make the response visually appealing and easy to scan"""
 
     HUMAN = """Category: {category}
 Current question: {question}
@@ -789,16 +799,30 @@ Current question: {question}
 Document Context:
 {context}
 
-Respond naturally and conversationally. Use the conversation history to understand what the user is referring to (like "them", "it", "those"). If they're asking for a summary, explanation, or follow-up about something from the conversation history, provide that based on both the history and any relevant document context.
+Source Documents Available:
+{source_metadata}
 
-IMPORTANT: Do NOT include any inline citations or parenthetical references in your answer text. Keep the answer clean and readable.
+Respond naturally and conversationally using Markdown formatting. Use the conversation history to understand what the user is referring to (like "them", "it", "those"). If they're asking for a summary, explanation, or follow-up about something from the conversation history, provide that based on both the history and any relevant document context.
+
+IMPORTANT: 
+- Format your response using Markdown syntax (headers, lists, bold, blockquotes, etc.)
+- Do NOT include any inline citations or parenthetical references in your answer text
+- Keep the answer clean and readable with proper Markdown structure
+
+CRITICAL RULES for Citations:
+1. Generate SEPARATE citations for EACH distinct source document
+2. Use the EXACT information from the Source Documents Available section above
+3. Do NOT combine multiple sources into one citation
+4. Each citation must be on its own numbered line
+5. Use the exact title, category, section, and date from the source metadata
 
 After your answer, provide citations in this exact format:
 
 Citations:
-1. Title: [exact document title] | Category: [category] | Section: [main section - subheading if available] | Date: [document issued date if available]
+1. Title: [exact document title from source_metadata] | Category: [exact category from source_metadata] | Section: [exact section from source_metadata] | Date: [exact date from source_metadata] | Start Page: [exact start page from source_metadata] | End Page: [exact end page from source_metadata]
+2. Title: [exact document title from source_metadata] | Category: [exact category from source_metadata] | Section: [exact section from source_metadata] | Date: [exact date from source_metadata] | Start Page: [exact start page from source_metadata] | End Page: [exact end page from source_metadata]
 
-For sections, include both main heading and subheading when available, separated by " - " (dash with spaces)."""
+Generate one citation per distinct source document. Do NOT combine sources."""
 
     PROMPT = ChatPromptTemplate.from_messages([
         ("system", SYSTEM),
@@ -879,8 +903,8 @@ def load_supabase_retriever(category: str):
             # Call Supabase RPC function directly
             result = self.client.rpc(self.search_function, {
                 "query_embedding": query_embedding,
-                "match_threshold": 0.1,  # Lower threshold for better recall
-                "match_count": TOP_K
+                "match_threshold": 0.15,  # Lower threshold for better recall
+                "match_count": TOP_K*2
             }).execute()
             
             # Convert to LangChain Document format
@@ -1892,6 +1916,142 @@ async def validate_json_file(
         )
 
 
+def extract_citations_with_openai(llm_response: str, source_metadata_list: list) -> list:
+    """
+    Extract citations from LLM response using OpenAI for intelligent parsing.
+    Returns a list of properly formatted citation objects.
+    """
+    cites = []
+    
+    try:
+        # Create a more specific prompt to extract citations
+        citation_extraction_prompt = f"""
+You are a citation extraction assistant. Extract citations from the following text and return them as a valid JSON array.
+
+Text to extract citations from:
+{llm_response}
+
+Instructions:
+1. Look for the "Citations:" section in the text
+2. Extract each numbered citation (1., 2., 3., etc.)
+3. Parse the title, category, section, date, and page numbers
+4. Return ONLY a valid JSON array
+
+Example output format:
+[
+  {{
+    "title": "Council Resolutions",
+    "category": "Resolutions", 
+    "section": "Resolution 41",
+    "date": "2024-01-01",
+    "start_page": 96,
+    "end_page": 98
+  }}
+]
+
+Return ONLY the JSON array, no other text.
+"""
+
+        # Use OpenAI to extract citations
+        citation_response = LLM.invoke(citation_extraction_prompt)
+        citations_json = citation_response.content if hasattr(citation_response, "content") else str(citation_response)
+        
+        
+        
+        # Clean the response - remove any markdown formatting
+        citations_json = citations_json.strip()
+        if citations_json.startswith("```json"):
+            citations_json = citations_json[7:]
+        if citations_json.endswith("```"):
+            citations_json = citations_json[:-3]
+        citations_json = citations_json.strip()
+        
+        # Parse the JSON response
+        import json
+        extracted_citations = json.loads(citations_json)
+        
+        
+        
+        # Convert to proper citation format
+        seen_documents = set()
+        
+        for citation_data in extracted_citations:
+            title = citation_data.get("title", "Unknown Document")
+            category = citation_data.get("category", "Unknown Category")
+            section = citation_data.get("section", "")
+            
+            # Create unique identifier for this document section (include section for uniqueness)
+            doc_key = (title.strip(), category.strip(), section.strip())
+            
+            # Skip if we've already seen this document section
+            if doc_key in seen_documents:
+                continue
+                
+            seen_documents.add(doc_key)
+            
+            # Find matching source metadata for rich fields
+            matching_meta = None
+            for meta in source_metadata_list:
+                if (meta['title'] == title and meta['category'] == category):
+                    matching_meta = meta
+                    break
+            
+            # If no exact match found, try to find any document with the same title
+            if not matching_meta:
+                for meta in source_metadata_list:
+                    if meta['title'] == title:
+                        matching_meta = meta
+                        break
+            
+            # Build citation with rich metadata
+            quote_content = matching_meta['content'] if matching_meta else ""
+            print(f"🔍 DEBUG: Citation for '{title}' - Quote length: {len(quote_content)}")
+            if quote_content:
+                print(f"📝 DEBUG: Quote preview: {quote_content[:100]}...")
+            else:
+                print(f"❌ DEBUG: No quote content found for '{title}'")
+            
+            citation_entry = {
+                "id": f"citation-{len(cites) + 1}",
+                "doc_title": title,
+                "title": title,
+                "category": category,
+                "section": citation_data.get("section", ""),
+                "date": citation_data.get("date", ""),
+                "quote": quote_content,
+                "pages": f"{citation_data.get('start_page', '')}-{citation_data.get('end_page', '')}" if citation_data.get('start_page') and citation_data.get('end_page') else "",
+                "heading_path": matching_meta['heading_path'] if matching_meta else "",
+                "hierarchy_path": matching_meta['heading_path'] if matching_meta else "",
+                "year": matching_meta['year'] if matching_meta else "",
+                "confidence_score": 0.95,  # High confidence since OpenAI extracted it
+                "document": {
+                    "title": title,
+                    "category": category,
+                    "section": citation_data.get("section", ""),
+                    "date": citation_data.get("date", ""),
+                    "year": matching_meta['year'] if matching_meta else "",
+                    "pages": f"{citation_data.get('start_page', '')}-{citation_data.get('end_page', '')}" if citation_data.get('start_page') and citation_data.get('end_page') else "",
+                    "heading_path": matching_meta['heading_path'] if matching_meta else ""
+                },
+                "meta": {
+                    "document_number": matching_meta['document_number'] if matching_meta else "",
+                    "chunk_index": matching_meta['chunk_index'] if matching_meta else "",
+                    "page_span": {
+                        "start": citation_data.get('start_page'),
+                        "end": citation_data.get('end_page')
+                    } if citation_data.get('start_page') and citation_data.get('end_page') else None
+                }
+            }
+            cites.append(citation_entry)
+
+    except Exception as e:
+        print(f"Error extracting citations with OpenAI: {e}")
+        print(f"Raw response was: {citations_json if 'citations_json' in locals() else 'No response'}")
+        # Fallback: return empty citations
+        cites = []
+    
+    return cites
+
 # === Q&A ENDPOINTS ===
 @app.post("/v1/ask", response_model=AskResponse)
 async def ask_question(req: AskRequest):
@@ -2056,86 +2216,51 @@ async def ask_question(req: AskRequest):
 
     docs = all_docs  # send top k to LLM
 
+    # Prepare source metadata for LLM
+    source_metadata_list = []
+    for doc in docs:
+        m = doc.metadata or {}
+        doc_obj = m.get("document", {})
+        if not isinstance(doc_obj, dict):
+            doc_obj = {}
+        
+        source_metadata_list.append({
+            "title": doc_obj.get("title", m.get("title", "Unknown Document")),
+            "category": doc_obj.get("category", m.get("category", "Unknown Category")),
+            "section": doc_obj.get("section", m.get("heading_path", "Unknown Section")),
+            "date": doc_obj.get("date", m.get("issued_date", "Unknown Date")),
+            "document_number": doc_obj.get("document_number", m.get("document_number", "")),
+            "year": doc_obj.get("year", m.get("year", "")),
+            "page_start": doc_obj.get("page_start", m.get("page_start", "")),
+            "page_end": doc_obj.get("page_end", m.get("page_end", "")),
+            "heading_path": doc_obj.get("heading_path", m.get("heading_path", "")),
+            "chunk_index": doc_obj.get("chunk_index", m.get("chunk_index", "")),
+            "content": doc.page_content[:500]  # First 500 chars for context
+        })
+    
+    # Format source metadata for LLM
+    source_metadata = ""
+    for i, meta in enumerate(source_metadata_list, 1):
+        source_metadata += f"{i}. Title: {meta['title']}\n"
+        source_metadata += f"   Category: {meta['category']}\n"
+        source_metadata += f"   Section: {meta['section']}\n"
+        source_metadata += f"   Date: {meta['date']}\n"
+        source_metadata += f"   Document Number: {meta['document_number']}\n"
+        source_metadata += f"   Year: {meta['year']}\n"
+        source_metadata += f"   Pages: {meta['page_start']}-{meta['page_end']}\n"
+        source_metadata += f"   Heading Path: {meta['heading_path']}\n"
+        source_metadata += f"   Content Preview: {meta['content'][:200]}...\n\n"
+
     # Call LLM and get raw content
     chain = PROMPT | LLM
     raw_resp = chain.invoke({
         "category": category,
         "question": req.question,
         "conversation_context": conversation_context,
-        "context": ctx
+        "context": ctx,
+        "source_metadata": source_metadata
     })
     ans = raw_resp.content if hasattr(raw_resp, "content") else str(raw_resp)
-
-    # --- EXTRACT citations from structured Citations section ---
-    citations_extracted = []
-    
-    # Look for the Citations: section in the response
-    citations_match = re.search(r'\n\s*Citations:\s*\n(.*?)$', ans, re.DOTALL | re.MULTILINE)
-    
-    if citations_match:
-        citations_text = citations_match.group(1)
-        
-        # Parse each citation line: "1. Title: [title] | Category: [category] | Section: [section] | Date: [date]"
-        citation_pattern = r'\d+\.\s*Title:\s*([^|]+)\s*\|\s*Category:\s*([^|]+)\s*\|\s*Section:\s*([^|]+)\s*\|\s*Date:\s*(.+?)(?=\n\d+\.|\n\s*$|$)'
-        citation_matches = re.findall(citation_pattern, citations_text, re.MULTILINE | re.DOTALL)
-        
-        # If no matches with Date field, try without Date field (backward compatibility)
-        if not citation_matches:
-            citation_pattern_old = r'\d+\.\s*Title:\s*([^|]+)\s*\|\s*Category:\s*([^|]+)\s*\|\s*Section:\s*(.+?)(?=\n\d+\.|\n\s*$|$)'
-            citation_matches_old = re.findall(citation_pattern_old, citations_text, re.MULTILINE | re.DOTALL)
-            
-            for title, category, section in citation_matches_old:
-                # Clean up extracted values
-                title = title.strip()
-                category = category.strip()
-                section = section.strip()
-                
-                # Clean section - remove dashes and empty indicators
-                if section in ["-", "N/A", "n/a", "None", "none", "", "null"]:
-                    section = ""
-                
-                # Try to extract year from title for fallback date
-                date_match = re.search(r'(\d{4})', title)
-                date = f"{date_match.group(1)}-01-01" if date_match else None
-                
-                citations_extracted.append({
-                    "title": title,
-                    "category": category,
-                    "section": section,
-                    "date": date
-                })
-        else:
-            for title, category, section, date_str in citation_matches:
-                # Clean up extracted values
-                title = title.strip()
-                category = category.strip()
-                section = section.strip()
-                date_str = date_str.strip()
-                
-                # Clean section - remove dashes and empty indicators
-                if section in ["-", "N/A", "n/a", "None", "none", "", "null"]:
-                    section = ""
-                
-                # Parse the date string - could be full date (2024-03-15) or just year (2025)
-                date = None
-                if date_str:
-                    # Try to parse full date first
-                    full_date_match = re.search(r'(\d{4}-\d{2}-\d{2})', date_str)
-                    if full_date_match:
-                        date = full_date_match.group(1)
-                    else:
-                        # Fall back to year extraction
-                        year_match = re.search(r'(\d{4})', date_str)
-                        if year_match:
-                            date = f"{year_match.group(1)}-01-01"
-                
-                citations_extracted.append({
-                    "title": title,
-                    "category": category,
-                    "section": section,
-                    "date": date
-                })
-    
     # --- CLEAN answer: remove the Citations section and inline citations ---
     # Remove the entire Citations: section from the answer
     ans_clean = re.sub(r'\n\s*Citations:\s*\n.*$', '', ans, flags=re.DOTALL | re.MULTILINE)
@@ -2156,161 +2281,16 @@ async def ask_question(req: AskRequest):
     # Remove any remaining parenthetical citations with semicolons
     ans_clean = re.sub(r'\s*\([^)]*;[^)]*\)', '', ans_clean, flags=re.IGNORECASE)
     
-    # Clean up extra spaces and punctuation issues
-    ans_clean = re.sub(r'\s+', ' ', ans_clean.strip())
+    # Clean up extra spaces and punctuation issues (but preserve markdown formatting)
+    # Only clean up multiple spaces within lines, not newlines
+    ans_clean = re.sub(r'[ \t]+', ' ', ans_clean.strip())  # Replace multiple spaces/tabs with single space
     ans_clean = re.sub(r'\s+\.', '.', ans_clean)  # Fix spacing before periods
     ans_clean = re.sub(r'\s+,', ',', ans_clean)   # Fix spacing before commas
 
-    # --- Build citations array from extracted structured citations ---
-    cites = []
-    seen_documents = set()  # Track (title, category) pairs to avoid duplicates
+    # --- Extract citations using OpenAI ---
+    cites = extract_citations_with_openai(ans, source_metadata_list)
     
-    # First, use citations extracted from structured Citations section
-    for citation_data in citations_extracted:
-        title = citation_data["title"]
-        category = citation_data["category"]
-        section = citation_data["section"]
-        date = citation_data["date"]
-        
-        # Create unique identifier for this document
-        doc_key = (title, category)
-        
-        # Skip if we've already seen this document
-        if doc_key in seen_documents:
-            continue
-            
-        seen_documents.add(doc_key)
-        
-        citation_entry = {
-            "document": {
-                "title": title,
-                "category": category,
-                "section": section,
-                "date": date
-            }
-        }
-        cites.append(citation_entry)
-    
-    # If no structured citations found, fall back to metadata extraction
-    if not cites:
-        # Helper to safely load metadata
-        def safe_load_meta(raw_meta):
-            if raw_meta is None:
-                return {}
-            if isinstance(raw_meta, dict):
-                return raw_meta
-            if isinstance(raw_meta, str):
-                try:
-                    return json.loads(raw_meta)
-                except Exception:
-                    return {"raw": raw_meta}
-            try:
-                return dict(raw_meta)
-            except Exception:
-                return {}
-
-        for idx, d in enumerate(docs[:5]):  # Check more docs but deduplicate
-            m_raw = d.metadata
-            m = safe_load_meta(m_raw)
-
-            # nested document object fallback
-            doc_obj = m.get("document") if isinstance(m, dict) else None
-            if not isinstance(doc_obj, dict):
-                doc_obj = {}
-
-            title = doc_obj.get("title") or m.get("title") or m.get("doc_title") or ""
-            category = doc_obj.get("category") or m.get("category") or m.get("folder") or ""
-            
-            # Create unique identifier for this document
-            doc_key = (title.strip(), category.strip())
-            
-            # Skip if we've already seen this document
-            if doc_key in seen_documents:
-                continue
-                
-            seen_documents.add(doc_key)
-            # Get the actual issued date from metadata, not just year from title
-            issued_date = doc_obj.get("issued_date") or m.get("issued_date") or None
-            if not issued_date:
-                # If no issued date, try to get year and format as date
-                year_val = doc_obj.get("year") or m.get("year") or None
-                if year_val:
-                    issued_date = f"{year_val}-01-01"  # Default to January 1st of that year
-
-            # Try many keys for section / heading with enhanced subheading support
-            section = ""
-            for key in ("section", "section_title", "heading", "heading_title", "title_path", "section_name", "section_desc"):
-                if m.get(key):
-                    section = str(m.get(key)).strip()
-                    break
-
-            # If heading_path present, try to format it into a friendly string with subheadings
-            if not section:
-                heading_path = m.get("heading_path") or []
-                if isinstance(heading_path, list) and heading_path:
-                    try:
-                        if len(heading_path) >= 3:
-                            # Main heading + subheading format: "Key Principles - Emergency Physician Authority"
-                            main_heading = heading_path[0].strip()
-                            sub_heading = heading_path[1].strip()
-                            # Join additional path elements with dashes
-                            additional = " - ".join([str(h).strip() for h in heading_path[2:] if h])
-                            if additional:
-                                section = f"{main_heading} - {sub_heading} - {additional}"
-                            else:
-                                section = f"{main_heading} - {sub_heading}"
-                        elif len(heading_path) == 2:
-                            # Main heading + subheading: "Key Principles - Emergency Physician Authority"
-                            section = f"{heading_path[0].strip()} - {heading_path[1].strip()}"
-                        else:
-                            section = str(heading_path[0]).strip()
-                    except Exception:
-                        section = " > ".join([str(h).strip() for h in heading_path])
-
-            # Enhanced fallback: look for section and subsection patterns in the document content
-            if not section and hasattr(d, 'page_content'):
-                content = d.page_content[:500]  # Check first 500 chars for section headers
-                
-                # Look for patterns like "Key Principles" followed by subheadings
-                section_match = re.search(r'(?:^|\n)\s*((?:Key Principles|Executive Summary|Background|Introduction|Recommendations|Guidelines|Policy|Procedures)[^.\n]*)', content, re.IGNORECASE | re.MULTILINE)
-                if section_match:
-                    main_section = section_match.group(1).strip()
-                    
-                    # Look for subsection after the main section
-                    remaining_content = content[section_match.end():]
-                    subsection_match = re.search(r'(?:^|\n)\s*([A-Z][^.\n]{10,50}?)(?:\n|$)', remaining_content, re.MULTILINE)
-                    
-                    if subsection_match:
-                        subsection = subsection_match.group(1).strip()
-                        # Only include if it looks like a proper subsection (not too long, starts with capital)
-                        if len(subsection) <= 50 and subsection[0].isupper():
-                            section = f"{main_section} - {subsection}"
-                    else:
-                        section = main_section
-
-            # Normalize empty strings to explicit empty
-            section = section.strip() if section else ""
-            
-            # Clean section field - replace invalid indicators with empty string
-            invalid_sections = ["-", "N/A", "n/a", "None", "none", "", "null"]
-            if section in invalid_sections:
-                section = ""
-
-            citation_entry = {
-                "document": {
-                    "title": title,
-                    "category": category,
-                    "section": section,
-                    "date": issued_date
-                }
-            }
-            cites.append(citation_entry)
-            
-            # Limit to maximum 3 unique citations
-            if len(cites) >= 3:
-                break
-
-    # Return cleaned answer (no citations inside text) and structured citation objects
+    # Return cleaned answer and separate citations
     return AskResponse(answer=ans_clean, citations=cites)
 
 
