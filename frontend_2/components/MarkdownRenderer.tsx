@@ -57,12 +57,12 @@ const markdownComponents = {
 
   // Lists
   ul: ({ children, ...props }: any) => (
-    <ul className="list-disc list-inside space-y-2 mb-4 text-gray-700 dark:text-gray-300" {...props}>
+    <ul className="list-disc list-outside space-y-2 mb-4 text-gray-700 dark:text-gray-300 pl-4" {...props}>
       {children}
     </ul>
   ),
   ol: ({ children, ...props }: any) => (
-    <ol className="list-decimal list-inside space-y-2 mb-4 text-gray-700 dark:text-gray-300" {...props}>
+    <ol className="list-decimal list-outside space-y-2 mb-4 text-gray-700 dark:text-gray-300 pl-4" {...props}>
       {children}
     </ol>
   ),
