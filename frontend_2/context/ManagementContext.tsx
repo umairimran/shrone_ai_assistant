@@ -251,9 +251,35 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addYearFolder = useCallback((categoryId: string, year: string) => {
-    // Year folders are created automatically when documents are uploaded
-    // This is more for UI consistency - the actual folder creation happens in the tree view
-    console.log('📁 Year folder request for category:', categoryId, 'year:', year);
+    console.log('📁 Creating year folder for category:', categoryId, 'year:', year);
+    
+    setCategories(prevCategories => {
+      return prevCategories.map(category => {
+        if (category.id === categoryId) {
+          // Initialize yearFolders array if it doesn't exist
+          const existingYears = category.yearFolders || [];
+          
+          // Check if year already exists
+          if (existingYears.includes(year)) {
+            console.warn('⚠️ Year folder already exists:', year, 'in category:', category.name);
+            return category;
+          }
+          
+          // Add the new year and sort in descending order
+          const updatedYearFolders = [...existingYears, year]
+            .sort((a, b) => parseInt(b) - parseInt(a));
+          
+          console.log('✅ Year folder added:', year, 'to category:', category.name);
+          console.log('📁 Updated year folders:', updatedYearFolders);
+          
+          return {
+            ...category,
+            yearFolders: updatedYearFolders
+          };
+        }
+        return category;
+      });
+    });
   }, []);
 
   const value: ManagementContextValue = {
