@@ -23,7 +23,7 @@ SUPABASE_TABLE_BY_CATEGORY = {
 }
 
 # Retrieval settings
-TOP_K = 15
+TOP_K = 50
 FETCH_K = 40      # for MMR diversity
 MMR_LAMBDA = 0.2
 

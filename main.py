@@ -674,12 +674,38 @@ async def delete_document_embeddings(document_title: str, category: str) -> dict
         
         # First, check how many chunks exist for this document
         try:
-            # Query for documents with matching title in metadata
+            # Try multiple query strategies to find the document
+            existing_chunks = None
+            
+            # Strategy 1: Exact title match
             existing_chunks = client.table(table_name).select("id, metadata").eq(
-                "metadata->document->>title", document_title
+                "metadata->>title", document_title
             ).execute()
             
+            # Strategy 2: If no exact match, try partial title match
             if not existing_chunks.data:
+                print(f"🔍 No exact title match, trying partial match for '{document_title}'")
+                # Get all documents and filter by partial title match
+                all_chunks = client.table(table_name).select("id, metadata").execute()
+                if all_chunks.data:
+                    # Filter by partial title match
+                    matching_chunks = []
+                    for chunk in all_chunks.data:
+                        metadata = chunk.get('metadata', {})
+                        title = metadata.get('title', '')
+                        source_file = metadata.get('source_file', '')
+                        
+                        # Check if title contains the document title or vice versa
+                        if (document_title.lower() in title.lower() or 
+                            title.lower() in document_title.lower() or
+                            document_title.lower() in source_file.lower()):
+                            matching_chunks.append(chunk)
+                    
+                    if matching_chunks:
+                        existing_chunks = type('MockResult', (), {'data': matching_chunks})()
+                        print(f"✅ Found {len(matching_chunks)} chunks using partial match")
+            
+            if not existing_chunks or not existing_chunks.data:
                 print(f"⚠️ No chunks found for document '{document_title}' in {table_name}")
                 return {
                     "status": "warning",
@@ -925,13 +951,12 @@ def load_supabase_retriever(category: str):
     return SupabaseCustomRetriever(client, EMB, search_function)
 
 def load_supabase_all_categories_retriever():
-    """Load Supabase retriever that searches across all categories"""
+    """Load Supabase retriever that searches across all categories using RPC functions"""
     if not QA_AVAILABLE:
         raise HTTPException(500, "Q&A functionality not available - missing dependencies")
     
     try:
         from supabase import create_client
-        from langchain_community.vectorstores import SupabaseVectorStore
     except ImportError:
         raise HTTPException(500, "Supabase dependencies not available")
     
@@ -942,58 +967,117 @@ def load_supabase_all_categories_retriever():
     
     client = create_client(url, key)
     
-    # Create a combined retriever that searches across all category tables
+    # Create a combined retriever that searches across all category tables using RPC functions
     class AllCategoriesRetriever:
         def __init__(self, client, embeddings, category_tables):
             self.client = client
             self.embeddings = embeddings
             self.category_tables = category_tables
+            
+            # Map table names to search function names (same as single category)
+            self.search_function_map = {
+                "vs_board_committees": "search_board_committees",
+                "vs_bylaws": "search_bylaws", 
+                "vs_external_advocacy": "search_external_advocacy",
+                "vs_policy_positions": "search_policy_positions",
+                "vs_resolutions": "search_resolutions"
+            }
         
         def get_relevant_documents(self, query: str, k: int = None):
-            """Search across all category tables and combine results"""
+            """Search across all category tables using RPC functions and combine results"""
             if k is None:
                 k = TOP_K
             
             all_docs = []
-            docs_per_category = max(1, k // len(self.category_tables))  # Distribute k across categories
+            # Retrieve more docs per category to improve recall, then select best ones
+            docs_per_category = max(10, (k // len(self.category_tables)) * 2)  # 10 docs per category for better coverage
+            
+            print(f"🚀 Searching all {len(self.category_tables)} categories with {docs_per_category} docs per category")
             
             for category, table_name in self.category_tables.items():
                 try:
-                    # Create vector store for this category
-                    vector_store = SupabaseVectorStore(
-                        client=self.client,
-                        embedding=self.embeddings,
-                        table_name=table_name,
-                        query_name=f"match_documents_{table_name}"
-                    )
+                    # Get the RPC function name for this table
+                    search_function = self.search_function_map.get(table_name)
+                    if not search_function:
+                        print(f"❌ No search function for table: {table_name}")
+                        continue
                     
-                    # Get documents from this category
-                    category_docs = vector_store.similarity_search(query, k=docs_per_category)
+                    # Generate embedding for the query
+                    query_embedding = self.embeddings.embed_query(query)
                     
-                    # Add category info to metadata if missing
-                    for doc in category_docs:
-                        if not doc.metadata.get('category'):
-                            doc.metadata['category'] = category
+                    # Call Supabase RPC function directly (same as single category)
+                    result = self.client.rpc(search_function, {
+                        "query_embedding": query_embedding,
+                        "match_threshold": 0.15,  # Lower threshold for better recall
+                        "match_count": docs_per_category
+                    }).execute()
                     
-                    all_docs.extend(category_docs)
+                    # Convert to LangChain Document format
+                    category_docs = []
+                    for i, row in enumerate(result.data):
+                        metadata = row.get('metadata', {})
+                        # Add similarity score to metadata
+                        metadata['similarity'] = row.get('similarity', 0.0)
+                        # Add category info to metadata - override BOTH top-level and nested
+                        metadata['category'] = category
+                        # Also override category in nested document object if it exists
+                        if 'document' in metadata and isinstance(metadata['document'], dict):
+                            metadata['document']['category'] = category
+                        
+                        doc = LangChainDocument(
+                            page_content=row.get('content', ''),
+                            metadata=metadata
+                        )
+                        category_docs.append(doc)
+                        all_docs.append(doc)
+                        
+                        # DEBUG: Show details of each chunk retrieved
+                        doc_title = metadata.get('title', 'Unknown Title')
+                        doc_section = metadata.get('heading_path', 'Unknown Section')
+                        similarity = row.get('similarity', 0.0)
+                        content_preview = row.get('content', '')[:100] + '...' if len(row.get('content', '')) > 100 else row.get('content', '')
+                        
+                        print(f"   📄 Chunk {i+1}: {doc_title} | {doc_section} | Similarity: {similarity:.3f}")
+                        print(f"      Content: {content_preview}")
+                    
+                    print(f"✅ Completed search for category: {category} ({len(result.data)} docs)")
                     
                 except Exception as e:
-                    print(f"Warning: Failed to search category {category}: {e}")
+                    print(f"❌ Error searching category {category}: {e}")
                     continue
             
-            # Remove duplicates based on content similarity and re-rank
-            unique_docs = []
-            seen_content = set()
+            # For All Categories, ensure equal representation from each category
+            # Distribute documents evenly across categories
+            print(f"🎯 All categories search completed: {len(all_docs)} total docs")
             
+            # Group documents by category to ensure balanced distribution
+            docs_by_category = {}
             for doc in all_docs:
-                # Create a simple hash of the content for deduplication
-                content_hash = hash(doc.page_content[:200])  # Use first 200 chars for dedup
-                if content_hash not in seen_content:
-                    seen_content.add(content_hash)
-                    unique_docs.append(doc)
+                cat = doc.metadata.get('category', 'Unknown')
+                if cat not in docs_by_category:
+                    docs_by_category[cat] = []
+                docs_by_category[cat].append(doc)
             
-            # Return top k documents (re-ranked by original similarity scores if available)
-            return unique_docs[:k]
+            # Calculate how many docs per category to include
+            docs_per_cat = max(1, k // len(docs_by_category))
+            balanced_docs = []
+            
+            # Take equal number from each category
+            for cat, docs in docs_by_category.items():
+                selected_docs = docs[:docs_per_cat]
+                balanced_docs.extend(selected_docs)
+                print(f"   📄 Including {min(len(docs), docs_per_cat)} docs from {cat}")
+                
+                # DEBUG: Show which specific documents are selected for final results
+                for i, doc in enumerate(selected_docs):
+                    doc_title = doc.metadata.get('title', 'Unknown Title')
+                    similarity = doc.metadata.get('similarity', 0.0)
+                    print(f"      ✅ Selected: {doc_title} (Similarity: {similarity:.3f})")
+            
+            print(f"🎯 Returning {len(balanced_docs)} balanced docs from {len(docs_by_category)} categories")
+            
+            # Return balanced selection
+            return balanced_docs[:k]
     
     return AllCategoriesRetriever(client, EMB, SUPABASE_TABLE_BY_CATEGORY)
 
@@ -1916,6 +2000,47 @@ async def validate_json_file(
         )
 
 
+def extract_citations_for_all_categories(source_metadata_list: list) -> list:
+    """
+    Force citations for ALL documents when 'All Categories' is selected.
+    Guarantees quotes from every category searched.
+    """
+    cites = []
+    
+    # Group by category for logging
+    by_category = {}
+    for meta in source_metadata_list:
+        cat = meta.get('category', 'Unknown')
+        if cat not in by_category:
+            by_category[cat] = []
+        by_category[cat].append(meta)
+    
+    print(f"📚 Generating citations for ALL documents from all categories:")
+    for cat, docs in by_category.items():
+        print(f"   📁 {cat}: {len(docs)} citations")
+    
+    # Generate citation for every document
+    for i, meta in enumerate(source_metadata_list):
+        citation = {
+            "id": f"citation-{i+1}",
+            "doc_title": meta.get('title', 'Unknown Document'),
+            "title": meta.get('title', 'Unknown Document'),
+            "category": meta.get('category', 'Unknown Category'),
+            "section": meta.get('section', 'Unknown Section'),
+            "date": meta.get('date', 'Unknown Date'),
+            "quote": meta.get('content', ''),  # ← GUARANTEED QUOTE
+            "pages": f"{meta.get('page_start', '')}-{meta.get('page_end', '')}" if meta.get('page_start') and meta.get('page_end') else "",
+            "heading_path": meta.get('heading_path', ''),
+            "hierarchy_path": meta.get('heading_path', ''),
+            "year": meta.get('year', ''),
+            "document_number": meta.get('document_number', ''),
+            "confidence_score": 0.95
+        }
+        cites.append(citation)
+    
+    print(f"✅ Generated {len(cites)} citations with quotes from {len(by_category)} categories")
+    return cites
+
 def extract_citations_with_openai(llm_response: str, source_metadata_list: list) -> list:
     """
     Extract citations from LLM response using OpenAI for intelligent parsing.
@@ -2154,28 +2279,10 @@ async def ask_question(req: AskRequest):
     # normalize / validate category the same way as before
     category = validate_qa_category(req.category)
 
-    # INTELLIGENT ROUTING: If "All Categories" is selected, use GPT to classify query
+    # For "All Categories", skip classification and search all categories
     if category == "All Categories":
-        try:
-            # Initialize folder router
-            folder_router = FolderRouter()
-            
-            # Route the query to get the most relevant folder(s)
-            routing_result = folder_router.route_query(req.question)
-            
-            if "error" not in routing_result and routing_result.get("selected_folders"):
-                # Get the primary folder (first one if multiple)
-                primary_folder = routing_result["selected_folders"][0]
-                # Map folder name to category display name
-                category = map_folder_to_category(primary_folder)
-                print(f"🎯 Query classified to category: {category} (from folder: {primary_folder})")
-            else:
-                # If routing fails, fall back to all categories search
-                print(f"⚠️ Routing failed: {routing_result.get('error', 'Unknown error')}")
-                category = "All Categories"  # Keep original selection
-        except Exception as e:
-            print(f"⚠️ Routing error: {e}")
-            category = "All Categories"  # Fall back to all categories search
+        print(f"🔍 Searching all categories for query: {req.question}")
+        # Keep category as "All Categories" to use all categories retriever
 
     # get retriever
     retriever = get_retriever(category)
@@ -2226,7 +2333,7 @@ async def ask_question(req: AskRequest):
         
         source_metadata_list.append({
             "title": doc_obj.get("title", m.get("title", "Unknown Document")),
-            "category": doc_obj.get("category", m.get("category", "Unknown Category")),
+            "category": m.get("category", "Unknown Category"),  # Use the category we set in retriever
             "section": doc_obj.get("section", m.get("heading_path", "Unknown Section")),
             "date": doc_obj.get("date", m.get("issued_date", "Unknown Date")),
             "document_number": doc_obj.get("document_number", m.get("document_number", "")),
@@ -2288,7 +2395,11 @@ async def ask_question(req: AskRequest):
     ans_clean = re.sub(r'\s+,', ',', ans_clean)   # Fix spacing before commas
 
     # --- Extract citations using OpenAI ---
-    cites = extract_citations_with_openai(ans, source_metadata_list)
+    # For "All Categories", force citations for ALL documents to guarantee quotes from each category
+    if category == "All Categories":
+        cites = extract_citations_for_all_categories(source_metadata_list)
+    else:
+        cites = extract_citations_with_openai(ans, source_metadata_list)
     
     # Return cleaned answer and separate citations
     return AskResponse(answer=ans_clean, citations=cites)
