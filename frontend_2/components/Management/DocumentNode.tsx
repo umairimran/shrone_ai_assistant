@@ -65,37 +65,39 @@ export function DocumentNode({
 
   return (
     <>
-      <div className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group">
+      <div className="flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group overflow-hidden">
         {/* Spacer for tree alignment */}
         <div className="w-4 h-4" />
         
         {/* Document Icon */}
-        <div className="flex-shrink-0 text-lg">
+        <div className="flex-shrink-0 text-base sm:text-lg">
           {getDocumentIcon(document.type)}
         </div>
         
         {/* Document Name */}
         <div 
-          className="flex-1 min-w-0 cursor-pointer"
+          className="flex-1 min-w-0 cursor-pointer overflow-hidden"
           onClick={handleDocumentClick}
         >
-          <span className="text-sm text-gray-900 dark:text-gray-100 truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-            {document.title || document.name}
-          </span>
-          {document.version && (
-            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-              v{document.version}
+          <div className="flex items-center gap-1 overflow-hidden">
+            <span className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors block flex-1">
+              {document.title || document.name}
             </span>
-          )}
+            {document.version && (
+              <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap flex-shrink-0">
+                v{document.version}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex-shrink-0 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           {onSelect && (
             <button
               onClick={handleDocumentClick}
-              className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-              title="View document"
+              className="p-1 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+              title="View"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -110,8 +112,8 @@ export function DocumentNode({
                 e.stopPropagation();
                 setShowDeleteConfirm(true);
               }}
-              className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-              title="Delete document"
+              className="p-1 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+              title="Delete"
               disabled={isDeleting}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

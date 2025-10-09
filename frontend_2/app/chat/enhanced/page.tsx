@@ -51,7 +51,7 @@ function EnhancedChatPageContent() {
         {/* Main Chat Area */}
         <div className="flex min-h-screen flex-col">
           {/* Mobile Header */}
-          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-zinc-900/95 px-4 py-4 backdrop-blur lg:hidden">
+          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-zinc-900/95 px-2 py-3 sm:px-4 sm:py-4 backdrop-blur lg:hidden">
             <button
               type="button"
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
@@ -63,8 +63,8 @@ function EnhancedChatPageContent() {
               </svg>
             </button>
             
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sharon</span>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">Sharon</span>
               <NewChatButton
                 onNewChat={startNewConversation}
                 hasMessages={hasMessages}
@@ -79,8 +79,8 @@ function EnhancedChatPageContent() {
 
           {/* Chat Content */}
           <main className="flex h-full flex-1 flex-col">
-            <section className="flex flex-1 flex-col px-4 pb-4 pt-6 sm:px-8">
-              <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+            <section className="flex flex-1 flex-col px-2 pb-2 pt-4 sm:px-4 sm:pb-4 sm:pt-6 lg:px-8">
+              <div className="mx-auto flex w-full max-w-3xl lg:max-w-4xl flex-col gap-4 sm:gap-6">
                 {/* Chat Header with New Chat Button */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">

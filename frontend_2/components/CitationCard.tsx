@@ -73,17 +73,17 @@ export function CitationCard({
     <div
       id={`citation-${index + 1}`}
       className={cn(
-        'group relative rounded-lg border p-4 transition-all duration-200',
+        'group relative rounded-lg border p-3 sm:p-4 transition-all duration-200',
         'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700',
         'hover:border-blue-500 hover:shadow-sm',
         isHighlighted && 'border-blue-500 shadow-sm',
         className
       )}
     >
-      <div className="p-4">
+      <div className="p-2 sm:p-4">
         {/* Citation Header */}
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-2 sm:gap-4 mb-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <span 
               className={cn(
                 'flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',

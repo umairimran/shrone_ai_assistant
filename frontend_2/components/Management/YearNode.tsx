@@ -41,7 +41,7 @@ export function YearNode({
       <div
         onClick={handleYearToggle}
         className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer transition-colors',
+          'flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-3 rounded-md cursor-pointer transition-colors overflow-hidden',
           'hover:bg-gray-100 dark:hover:bg-gray-800',
           isExpanded && 'bg-gray-50 dark:bg-gray-800/50'
         )}
@@ -64,35 +64,38 @@ export function YearNode({
         </div>
 
         {/* Year Folder Icon */}
-        <div className="flex-shrink-0 text-lg">
+        <div className="flex-shrink-0 text-base sm:text-lg">
           📂
         </div>
 
         {/* Year and Document Count */}
-        <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-            {yearFolder.year}
-          </span>
-          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-            ({yearFolder.documentCount} {yearFolder.documentCount === 1 ? 'document' : 'documents'})
-          </span>
+        <div className="flex-1 min-w-0 pr-1 overflow-hidden">
+          <div className="flex items-center gap-1 sm:gap-2 overflow-hidden">
+            <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 flex-shrink-0">
+              {yearFolder.year}
+            </span>
+            <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap flex-shrink-0">
+              ({yearFolder.documentCount})
+            </span>
+          </div>
         </div>
 
         {/* Upload Document Button */}
         {isExpanded && (
           <button
             onClick={handleUploadDocument}
-            className="flex-shrink-0 px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors"
+            className="flex-shrink-0 px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
             title="Upload document to this year"
           >
-            + Upload Document
+            <span className="hidden sm:inline">+ Upload Document</span>
+            <span className="sm:hidden">+ Upload</span>
           </button>
         )}
       </div>
 
       {/* Documents */}
       {isExpanded && (
-        <div className="ml-6 mt-1 space-y-1">
+        <div className="ml-3 sm:ml-6 mt-1 space-y-1">
           {yearFolder.documents.length > 0 ? (
             yearFolder.documents.map((document, index) => (
               <DocumentNode
@@ -103,15 +106,19 @@ export function YearNode({
               />
             ))
           ) : (
-            <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-3 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
               <div className="w-4 h-4" /> {/* Spacer for alignment */}
-              <div className="text-lg">📄</div>
-              <span>No documents in {yearFolder.year}</span>
+              <div className="text-base sm:text-lg">📄</div>
+              <span className="flex-1 min-w-0 truncate">
+                <span className="hidden sm:inline">No documents in {yearFolder.year}</span>
+                <span className="sm:hidden">Empty</span>
+              </span>
               <button
                 onClick={() => onUploadDocument(categoryId, yearFolder.year)}
-                className="ml-auto px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors"
+                className="ml-auto px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
               >
-                Upload Document
+                <span className="hidden sm:inline">Upload Document</span>
+                <span className="sm:hidden">Upload</span>
               </button>
             </div>
           )}

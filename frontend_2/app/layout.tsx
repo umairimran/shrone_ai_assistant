@@ -11,6 +11,11 @@ export const metadata: Metadata = {
   description: 'AI-powered chatbot for document analysis with intelligent citations and insights',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: {

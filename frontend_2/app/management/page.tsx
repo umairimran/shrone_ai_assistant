@@ -149,11 +149,11 @@ function ManagementPageContent() {
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-900">
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur">
-        <div className="flex items-center justify-between px-4 py-4 max-w-7xl mx-auto">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between px-2 py-3 sm:px-4 sm:py-4 max-w-7xl mx-auto">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Link
               href="/chat"
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+              className="inline-flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-3 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -161,24 +161,25 @@ function ManagementPageContent() {
               Back to Chat
             </Link>
             <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
                 Document Management
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">
                 Upload, organize, and manage your documents
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setShowCreateCategoryModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Create New Category
+              <span className="hidden sm:inline">Create New Category</span>
+              <span className="sm:hidden">Create</span>
             </button>
             <ThemeToggle />
           </div>
@@ -186,19 +187,19 @@ function ManagementPageContent() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-2 py-4 sm:px-4 sm:py-8">
         <div>
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          <div className="mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
               Document Library
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Browse and manage your documents in a hierarchical structure organized by category and year.
             </p>
           </div>
 
           {/* Document Tree */}
-          <div className="bg-white dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <div className="bg-white dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-6">
             <HierarchicalTree
               onDocumentSelect={(document) => {
                 console.log('Document selected:', document);

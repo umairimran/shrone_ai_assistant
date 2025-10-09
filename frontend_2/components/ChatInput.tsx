@@ -70,8 +70,8 @@ export function ChatInput() {
   }, []);
 
   return (
-    <div className="sticky bottom-0 z-10 bg-white dark:bg-zinc-900 px-4 py-4 sm:px-6">
-      <div className="mx-auto flex max-w-4xl lg:max-w-5xl xl:max-w-6xl items-end gap-3">
+    <div className="sticky bottom-0 z-10 bg-white dark:bg-zinc-900 px-2 py-3 sm:px-4 sm:py-4 md:px-6">
+      <div className="mx-auto flex w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl items-end gap-2 sm:gap-3">
         <div
           className={cn(
             'flex-1 flex items-end rounded-xl transition-shadow duration-200 cursor-text',
@@ -82,7 +82,7 @@ export function ChatInput() {
           )}
           onClick={handleContainerClick}
         >
-          <div className="flex-1 px-4 py-3">
+          <div className="flex-1 px-3 py-2 sm:px-4 sm:py-3">
             <label htmlFor="chat-input" className="sr-only">
               Ask about the document
             </label>
@@ -110,7 +110,7 @@ export function ChatInput() {
             onClick={handleSend}
             disabled={!value.trim() || isAssistantTyping}
             className={cn(
-              'mr-2 mb-2 rounded-lg px-4 py-2 font-medium text-sm transition-all duration-200',
+              'mr-1 mb-1 sm:mr-2 sm:mb-2 rounded-lg px-3 py-2 sm:px-4 font-medium text-xs sm:text-sm transition-all duration-200',
               // Dynamic button styling based on input state
               value.trim() && !isAssistantTyping
                 ? [

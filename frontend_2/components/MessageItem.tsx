@@ -239,7 +239,7 @@ export function MessageItem({ message }: MessageItemProps) {
 
   return (
     <article 
-      className={cn('flex items-start gap-3 sm:gap-4 animate-slide-in', isUser ? 'flex-row-reverse sm:flex-row' : '')}
+      className={cn('flex items-start gap-2 sm:gap-3 lg:gap-4 animate-slide-in px-2 sm:px-0', isUser ? 'flex-row-reverse sm:flex-row' : '')}
       aria-label={`${isUser ? 'Your' : 'Assistant'} message from ${formatTime(message.createdAt)}`}
     >
       <div
@@ -254,10 +254,10 @@ export function MessageItem({ message }: MessageItemProps) {
       >
         {isUser ? 'Y' : 'SH'}
       </div>
-      <div className={cn('flex-1 min-w-0 max-w-[90%] sm:max-w-4xl lg:max-w-5xl xl:max-w-6xl', isUser ? 'text-right sm:text-left' : 'text-left')}>
+      <div className={cn('flex-1 min-w-0 max-w-[85%] sm:max-w-[90%] md:max-w-4xl lg:max-w-5xl xl:max-w-6xl', isUser ? 'text-right sm:text-left' : 'text-left')}>
         <div
           className={cn(
-            'group relative rounded-xl px-4 py-3 border transition-colors',
+            'group relative rounded-xl px-3 py-2 sm:px-4 sm:py-3 border transition-colors',
             isUser 
               ? 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
               : 'bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
