@@ -30,12 +30,24 @@ export function ChatInput() {
 
   const handleSend = useCallback(async () => {
     if (!value.trim()) return;
-    await sendMessage(value);
+    const messageToSend = value.trim();
+    
+    // Clear the input immediately for better UX
     setValue('');
-    // Reset textarea height after sending
+    
+    // Reset textarea height after clearing
     if (textAreaRef.current) {
       textAreaRef.current.style.height = 'auto';
     }
+    
+    try {
+      await sendMessage(messageToSend);
+    } catch (error) {
+      // If sending fails, restore the message
+      console.error('Failed to send message:', error);
+      setValue(messageToSend);
+    }
+    
     textAreaRef.current?.focus();
   }, [sendMessage, value]);
 
@@ -99,10 +111,23 @@ export function ChatInput() {
             disabled={!value.trim() || isAssistantTyping}
             className={cn(
               'mr-2 mb-2 rounded-lg px-4 py-2 font-medium text-sm transition-all duration-200',
-              'bg-blue-500 text-white',
-              'hover:bg-blue-600',
-              'active:bg-blue-700',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
+              // Dynamic button styling based on input state
+              value.trim() && !isAssistantTyping
+                ? [
+                    // Active state (when user has typed something)
+                    'bg-blue-700 text-white shadow-md',
+                    'hover:bg-blue-800',
+                    'active:bg-blue-900',
+                    'transform hover:scale-[1.02]',
+                    'shadow-blue-200 dark:shadow-blue-900'
+                  ]
+                : [
+                    // Inactive state (empty input or assistant typing)
+                    'bg-blue-500 text-white',
+                    'hover:bg-blue-600',
+                    'active:bg-blue-700'
+                  ],
+              'disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none',
               'focus:outline-none focus:ring-2 focus:ring-blue-500/50'
             )}
             aria-label={isAssistantTyping ? 'Assistant is typing' : 'Send message'}
@@ -120,9 +145,25 @@ export function ChatInput() {
               <>
                 <span className="sr-only">Send your message</span>
                 <div className="flex items-center gap-2" aria-hidden="true">
-                  <span>Send</span>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  <span className={cn(
+                    'transition-all duration-200',
+                    value.trim() ? 'font-semibold' : 'font-medium'
+                  )}>Send</span>
+                  <svg 
+                    className={cn(
+                      'w-4 h-4 transition-all duration-200',
+                      value.trim() ? 'transform translate-x-0.5' : ''
+                    )} 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={value.trim() ? 2.5 : 2} 
+                      d="M14 5l7 7m0 0l-7 7m7-7H3" 
+                    />
                   </svg>
                 </div>
               </>

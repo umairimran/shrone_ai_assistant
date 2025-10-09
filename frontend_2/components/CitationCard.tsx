@@ -198,6 +198,7 @@ interface CitationsListProps {
   onViewDocument?: (_citation: Citation) => void;
   highlightedIndex?: number;
   className?: string;
+  maxVisibleCitations?: number; // Number of citations to show initially
 }
 
 export function CitationsList({ 
@@ -205,8 +206,11 @@ export function CitationsList({
   onCitationClick: _onCitationClick, 
   onViewDocument,
   highlightedIndex,
-  className 
+  className,
+  maxVisibleCitations = 2 // Show 2 citations by default
 }: CitationsListProps) {
+  const [showAll, setShowAll] = React.useState(false);
+  
   if (!citations || citations.length === 0) {
     return (
       <div className={cn('mt-6', className)}>
@@ -222,21 +226,68 @@ export function CitationsList({
     );
   }
 
+  const hasMoreCitations = citations.length > maxVisibleCitations;
+  const visibleCitations = showAll ? citations : citations.slice(0, maxVisibleCitations);
+  const hiddenCount = citations.length - maxVisibleCitations;
+
   return (
     <div className={cn('mt-6', className)}>
       <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
         Citations ({citations.length})
       </h4>
-      <div className="space-y-3">
-        {citations.map((citation, index) => (
-          <CitationCard
+      <div className="space-y-3" id="citations-list">
+        {visibleCitations.map((citation, index) => (
+          <div
             key={citation.id || index}
-            citation={citation}
-            index={index}
-            isHighlighted={highlightedIndex === index}
-            onViewDocument={onViewDocument}
-          />
+            className={cn(
+              'transform transition-all duration-300 ease-in-out',
+              index >= maxVisibleCitations && !showAll ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+            )}
+          >
+            <CitationCard
+              citation={citation}
+              index={index}
+              isHighlighted={highlightedIndex === index}
+              onViewDocument={onViewDocument}
+            />
+          </div>
         ))}
+        
+        {/* Show More/Less Button */}
+        {hasMoreCitations && (
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className={cn(
+                'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200',
+                'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+                'hover:bg-blue-100 dark:hover:bg-blue-900/50',
+                'border border-blue-200 dark:border-blue-700',
+                'focus:outline-none focus:ring-2 focus:ring-blue-500/50',
+                'transform hover:scale-[1.02] active:scale-[0.98]'
+              )}
+              aria-expanded={showAll}
+              aria-controls="citations-list"
+              aria-label={showAll ? `Hide ${hiddenCount} citations` : `Show ${hiddenCount} more citations`}
+            >
+              {showAll ? (
+                <>
+                  <span>Show Less</span>
+                  <svg className="w-4 h-4 transform transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  </svg>
+                </>
+              ) : (
+                <>
+                  <span>Show {hiddenCount} More Citation{hiddenCount > 1 ? 's' : ''}</span>
+                  <svg className="w-4 h-4 transform transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

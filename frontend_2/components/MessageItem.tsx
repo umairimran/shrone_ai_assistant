@@ -294,6 +294,7 @@ export function MessageItem({ message }: MessageItemProps) {
                 citations={message.citations || []}
                 onViewDocument={handleViewDocument}
                 highlightedIndex={highlightedCitationIndex}
+                maxVisibleCitations={2} // Show 2 citations initially, expand to show more
               />
             </div>
           )}
