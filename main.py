@@ -674,12 +674,38 @@ async def delete_document_embeddings(document_title: str, category: str) -> dict
         
         # First, check how many chunks exist for this document
         try:
-            # Query for documents with matching title in metadata
+            # Try multiple query strategies to find the document
+            existing_chunks = None
+            
+            # Strategy 1: Exact title match
             existing_chunks = client.table(table_name).select("id, metadata").eq(
-                "metadata->document->>title", document_title
+                "metadata->>title", document_title
             ).execute()
             
+            # Strategy 2: If no exact match, try partial title match
             if not existing_chunks.data:
+                print(f"🔍 No exact title match, trying partial match for '{document_title}'")
+                # Get all documents and filter by partial title match
+                all_chunks = client.table(table_name).select("id, metadata").execute()
+                if all_chunks.data:
+                    # Filter by partial title match
+                    matching_chunks = []
+                    for chunk in all_chunks.data:
+                        metadata = chunk.get('metadata', {})
+                        title = metadata.get('title', '')
+                        source_file = metadata.get('source_file', '')
+                        
+                        # Check if title contains the document title or vice versa
+                        if (document_title.lower() in title.lower() or 
+                            title.lower() in document_title.lower() or
+                            document_title.lower() in source_file.lower()):
+                            matching_chunks.append(chunk)
+                    
+                    if matching_chunks:
+                        existing_chunks = type('MockResult', (), {'data': matching_chunks})()
+                        print(f"✅ Found {len(matching_chunks)} chunks using partial match")
+            
+            if not existing_chunks or not existing_chunks.data:
                 print(f"⚠️ No chunks found for document '{document_title}' in {table_name}")
                 return {
                     "status": "warning",
