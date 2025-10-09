@@ -3,58 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { CategoryCard } from '@/components/Management/CategoryCard';
-import { DocumentItem } from '@/components/Management/DocumentItem';
+import { HierarchicalTree } from '@/components/Management/HierarchicalTree';
 import { UploadDocumentModal } from '@/components/Management/UploadDocumentModal';
 import { ManagementProvider, useManagement } from '@/context/ManagementContext';
 import DocumentCacheService from '@/services/DocumentCacheService';
 import { testBackendConnection, testDocumentsEndpoint } from '@/lib/testBackend';
 
-// Component that uses the cache
-function ViewingCategoryDocuments({ 
-  categoryId, 
-  onDeleteDocument 
-}: { 
-  categoryId: string;
-  onDeleteDocument: (documentId: string) => Promise<boolean>;
-}) {
-  const { getDocumentsByCategory, isLoading } = useManagement();
-  
-  const documents = getDocumentsByCategory(categoryId);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading documents...</span>
-      </div>
-    );
-  }
-
-  if (documents.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <div className="text-gray-400 mb-2">📄</div>
-        <p className="text-gray-600 dark:text-gray-400">No documents found in this category</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Found {documents.length} {documents.length === 1 ? 'document' : 'documents'}
-      </div>
-      {documents.map((document, index) => (
-        <DocumentItem
-          key={document.id || index}
-          document={document}
-          onDelete={onDeleteDocument}
-        />
-      ))}
-    </div>
-  );
-}
 
 function ManagementPageContent() {
   const { 
@@ -67,9 +21,8 @@ function ManagementPageContent() {
     getDocumentsByCategory
   } = useManagement();
   
-  const [viewingCategory, setViewingCategory] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
+  const [uploadContext, setUploadContext] = useState<{categoryId: string, year?: string} | null>(null);
   const [isClient, setIsClient] = useState(false);
 
   // Handle client-side hydration
@@ -106,60 +59,49 @@ function ManagementPageContent() {
     initCache();
   }, [initializeCache, isClient]);
 
-  const handleViewDocuments = (categoryId: string) => {
-    if (!isClient || !DocumentCacheService.isCacheInitialized()) {
-      initializeCache();
-      return;
+  const handleTreeUploadDocument = (categoryId: string, year?: string) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    if (category) {
+      setUploadContext({ categoryId, year });
+      setShowUploadModal(true);
     }
-    setViewingCategory(categoryId);
-  };
-
-  const handleUploadClick = (categoryId: string) => {
-    setUploadCategoryId(categoryId);
-    setShowUploadModal(true);
   };
 
   const handleGeneralUploadClick = () => {
-    setUploadCategoryId(null); // No category pre-selected
+    setUploadContext(null); // No category pre-selected
     setShowUploadModal(true);
   };
 
   const handleUploadModalClose = () => {
     setShowUploadModal(false);
-    setUploadCategoryId(null);
+    setUploadContext(null);
   };
 
   const handleDeleteDocument = async (documentId: string): Promise<boolean> => {
     try {
-      // Extract document info from the ID and current viewing context
-      // The documentId format is like "categoryId-index", but we need the actual document data
-      // Let's find the document in the current category being viewed
-      
-      if (!viewingCategory) {
-        console.error('No category selected for deletion');
-        return false;
-      }
+      // Find the document across all categories since we're using a tree structure
+      let targetDocument = null;
+      let targetCategory = null;
 
-      const documents = getDocumentsByCategory(viewingCategory);
-      const document = documents.find(doc => doc.id === documentId);
+      for (const category of categories) {
+        const documents = getDocumentsByCategory(category.id);
+        const document = documents.find(doc => doc.id === documentId);
+        if (document) {
+          targetDocument = document;
+          targetCategory = category;
+          break;
+        }
+      }
       
-      if (!document) {
+      if (!targetDocument || !targetCategory) {
         console.error('Document not found:', documentId);
         return false;
       }
 
-      // Get category name from the document or from the current category
-      const categoryName = document.category || categories.find(cat => cat.id === viewingCategory)?.name;
-      
-      if (!categoryName) {
-        console.error('Could not determine category for document');
-        return false;
-      }
-
-      console.log('🗑️ Deleting document:', document.title, 'from category:', categoryName);
+      console.log('🗑️ Deleting document:', targetDocument.title, 'from category:', targetCategory.name);
       
       // Call the delete function with title and category
-      const success = await deleteDocument(document.title || document.name, categoryName);
+      const success = await deleteDocument(targetDocument.title || targetDocument.name, targetCategory.name);
       
       return success;
     } catch (error) {
@@ -227,47 +169,24 @@ function ManagementPageContent() {
         <div>
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-              Document Categories
+              Document Library
             </h2>
             <p className="text-gray-600 dark:text-gray-400">
-              Select a category to view and manage documents, or upload new documents.
+              Browse and manage your documents in a hierarchical structure organized by category and year.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {categories.map((category) => (
-              <CategoryCard
-                key={category.id}
-                category={category}
-                isSelected={false}
-                onSelect={() => handleViewDocuments(category.id)}
-                onUpload={() => handleUploadClick(category.id)}
-              />
-            ))}
+          {/* Document Tree */}
+          <div className="bg-white dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <HierarchicalTree
+              onDocumentSelect={(document) => {
+                console.log('Document selected:', document);
+                // TODO: Implement document viewing/preview
+              }}
+              onDocumentDelete={handleDeleteDocument}
+              onUploadDocument={handleTreeUploadDocument}
+            />
           </div>
-
-          {/* Document List for Viewing Category */}
-          {viewingCategory && (
-            <div className="mt-8 bg-white dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Documents in {categories.find(cat => cat.id === viewingCategory)?.name}
-                </h3>
-                <button
-                  onClick={() => setViewingCategory(null)}
-                  className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <ViewingCategoryDocuments 
-                categoryId={viewingCategory}
-                onDeleteDocument={handleDeleteDocument}
-              />
-            </div>
-          )}
         </div>
       </main>
 
@@ -278,7 +197,7 @@ function ManagementPageContent() {
           onClose={handleUploadModalClose}
           onUpload={uploadDocument}
           categories={categories}
-          selectedCategoryId={uploadCategoryId}
+          selectedCategoryId={uploadContext?.categoryId || null}
         />
       )}
     </div>

@@ -159,3 +159,38 @@ export interface ManagementContextValue {
   clearDocumentCache: () => void;
   getCacheInfo: () => Array<{category: string, count: number, cachedAt: string}>;
 }
+
+// Hierarchical tree types
+export interface TreeExpandedState {
+  [categoryId: string]: {
+    isExpanded: boolean;
+    years?: {
+      [year: string]: boolean;
+    };
+  };
+}
+
+export interface YearFolder {
+  year: string;
+  documents: UploadedDoc[];
+  documentCount: number;
+}
+
+export interface CategoryTreeNode {
+  id: string;
+  name: string;
+  description?: string;
+  documentCount: number;
+  yearFolders: YearFolder[];
+  isExpanded: boolean;
+}
+
+export interface CreateCategoryData {
+  name: string;
+  description?: string;
+}
+
+export interface CreateYearData {
+  categoryId: string;
+  year: string;
+}
