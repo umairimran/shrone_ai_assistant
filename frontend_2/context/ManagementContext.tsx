@@ -13,6 +13,8 @@ interface ManagementContextValue {
   getDocumentsByCategory: (categoryId: string) => UploadedDoc[];
   uploadDocument: (data: DocumentUploadData) => Promise<'ok' | 'invalid' | 'failed'>;
   deleteDocument: (documentTitle: string, category: string) => Promise<boolean>;
+  addCategory: (name: string, description?: string) => void;
+  addYearFolder: (categoryId: string, year: string) => void;
 }
 
 const ManagementContext = createContext<ManagementContextValue | undefined>(undefined);
@@ -228,6 +230,32 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     }
   }, [initializeCache]);
 
+  const addCategory = useCallback((name: string, description?: string) => {
+    const newCategory: DocumentCategory = {
+      id: `custom-${Date.now()}`, // Generate unique ID
+      name,
+      description,
+      documentCount: 0
+    };
+    
+    setCategories(prevCategories => {
+      // Check if category already exists
+      if (prevCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
+        console.warn('Category already exists:', name);
+        return prevCategories;
+      }
+      return [...prevCategories, newCategory];
+    });
+    
+    console.log('✅ Category added:', newCategory);
+  }, []);
+
+  const addYearFolder = useCallback((categoryId: string, year: string) => {
+    // Year folders are created automatically when documents are uploaded
+    // This is more for UI consistency - the actual folder creation happens in the tree view
+    console.log('📁 Year folder request for category:', categoryId, 'year:', year);
+  }, []);
+
   const value: ManagementContextValue = {
     isCacheReady,
     isLoading,
@@ -235,7 +263,9 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     initializeCache,
     getDocumentsByCategory,
     uploadDocument,
-    deleteDocument
+    deleteDocument,
+    addCategory,
+    addYearFolder
   };
 
   return (

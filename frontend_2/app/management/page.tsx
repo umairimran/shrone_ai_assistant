@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { HierarchicalTree } from '@/components/Management/HierarchicalTree';
 import { UploadDocumentModal } from '@/components/Management/UploadDocumentModal';
+import { CreateCategoryModal } from '@/components/Management/CreateCategoryModal';
 import { ManagementProvider, useManagement } from '@/context/ManagementContext';
 import DocumentCacheService from '@/services/DocumentCacheService';
 import { testBackendConnection, testDocumentsEndpoint } from '@/lib/testBackend';
@@ -18,10 +19,13 @@ function ManagementPageContent() {
     initializeCache,
     uploadDocument,
     deleteDocument,
-    getDocumentsByCategory
+    getDocumentsByCategory,
+    addCategory,
+    addYearFolder
   } = useManagement();
   
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false);
   const [uploadContext, setUploadContext] = useState<{categoryId: string, year?: string} | null>(null);
   const [isClient, setIsClient] = useState(false);
 
@@ -75,6 +79,23 @@ function ManagementPageContent() {
   const handleUploadModalClose = () => {
     setShowUploadModal(false);
     setUploadContext(null);
+  };
+
+  const handleCreateCategory = async (data: {name: string, description?: string}) => {
+    try {
+      console.log('Creating new category:', data);
+      
+      // Add the category to the state immediately
+      addCategory(data.name, data.description);
+      
+      // Close the modal
+      setShowCreateCategoryModal(false);
+      
+      // Show success feedback
+      console.log('✅ Category created successfully:', data.name);
+    } catch (error) {
+      console.error('Error creating category:', error);
+    }
   };
 
   const handleDeleteDocument = async (documentId: string): Promise<boolean> => {
@@ -151,13 +172,13 @@ function ManagementPageContent() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={handleGeneralUploadClick}
+              onClick={() => setShowCreateCategoryModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Upload Document
+              Create New Category
             </button>
             <ThemeToggle />
           </div>
@@ -198,6 +219,15 @@ function ManagementPageContent() {
           onUpload={uploadDocument}
           categories={categories}
           selectedCategoryId={uploadContext?.categoryId || null}
+        />
+      )}
+
+      {/* Create Category Modal */}
+      {showCreateCategoryModal && (
+        <CreateCategoryModal
+          isOpen={showCreateCategoryModal}
+          onClose={() => setShowCreateCategoryModal(false)}
+          onCreate={handleCreateCategory}
         />
       )}
     </div>
