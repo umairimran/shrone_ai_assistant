@@ -252,7 +252,7 @@ export function MessageItem({ message }: MessageItemProps) {
             : 'bg-blue-500 text-white'
         )}
       >
-        {isUser ? 'Y' : 'AI'}
+        {isUser ? 'Y' : 'SH'}
       </div>
       <div className={cn('flex-1 min-w-0 max-w-[90%] sm:max-w-4xl lg:max-w-5xl xl:max-w-6xl', isUser ? 'text-right sm:text-left' : 'text-left')}>
         <div
