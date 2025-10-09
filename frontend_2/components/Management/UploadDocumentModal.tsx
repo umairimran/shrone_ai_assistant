@@ -91,15 +91,15 @@ export function UploadDocumentModal({
     if (!formData.category) return 'Category is required';
     if (!selectedFile) return 'Please select a file';
     
-    // Validate file size (200MB limit)
+    // Validate file size (50MB limit as per backend)
     const sizeMB = selectedFile.size / (1024 * 1024);
-    if (sizeMB > 200) return 'File size must be less than 200MB';
+    if (sizeMB > 50) return 'File size must be less than 50MB';
     
-    // Validate file type
-    const allowedTypes = ['.pdf', '.doc', '.docx', '.txt'];
+    // Validate file type (as per backend supported extensions)
+    const allowedTypes = ['.pdf', '.docx', '.txt', '.md'];
     const fileExtension = selectedFile.name.toLowerCase().substring(selectedFile.name.lastIndexOf('.'));
     if (!allowedTypes.includes(fileExtension)) {
-      return 'Only PDF, DOC, DOCX, and TXT files are allowed';
+      return 'Only PDF, DOCX, TXT, and MD files are allowed';
     }
     
     return null;
@@ -110,11 +110,15 @@ export function UploadDocumentModal({
     
     const validationError = validateForm();
     if (validationError) {
+      console.error('❌ Validation error:', validationError);
       setError(validationError);
       return;
     }
 
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      console.error('❌ No file selected');
+      return;
+    }
 
     setIsUploading(true);
     setError(null);
@@ -134,13 +138,15 @@ export function UploadDocumentModal({
         resetForm();
         onClose();
       } else if (result === 'invalid') {
+        console.error('❌ Upload validation failed');
         setError('Invalid file type or size. Please check your file.');
       } else {
-        setError('Upload failed. Please try again.');
+        console.error('❌ Upload failed with result:', result);
+        setError('Upload failed. Please check the console for detailed error information. Make sure the backend server is running and accessible.');
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setError('Upload failed. Please try again.');
+      setError('Upload failed. Backend server may not be running. Check console for details.');
     } finally {
       setIsUploading(false);
     }
@@ -261,12 +267,12 @@ export function UploadDocumentModal({
                 ref={fileInputRef}
                 type="file"
                 onChange={handleFileChange}
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.docx,.txt,.md"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900 dark:file:text-blue-300"
                 disabled={isUploading}
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Supported formats: PDF, DOC, DOCX, TXT (max 200MB)
+                Supported formats: PDF, DOCX, TXT, MD (max 50MB)
               </p>
             </div>
 

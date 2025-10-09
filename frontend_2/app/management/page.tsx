@@ -21,7 +21,7 @@ function ManagementPageContent() {
     deleteDocument,
     getDocumentsByCategory,
     addCategory,
-    addYearFolder
+    addYearFolder: _addYearFolder
   } = useManagement();
   
   const [showUploadModal, setShowUploadModal] = useState(false);

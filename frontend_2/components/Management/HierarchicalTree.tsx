@@ -46,12 +46,18 @@ export function HierarchicalTree({
         yearGroups[year].push(doc);
       });
 
+      // Include explicit year folders from category state
+      const allYears = new Set([
+        ...Object.keys(yearGroups),
+        ...(category.yearFolders || [])
+      ]);
+
       // Create year folders, sorted by year (descending)
-      const yearFolders: YearFolder[] = Object.entries(yearGroups)
-        .map(([year, docs]) => ({
+      const yearFolders: YearFolder[] = Array.from(allYears)
+        .map(year => ({
           year,
-          documents: docs,
-          documentCount: docs.length
+          documents: yearGroups[year] || [],
+          documentCount: (yearGroups[year] || []).length
         }))
         .sort((a, b) => parseInt(b.year) - parseInt(a.year));
 

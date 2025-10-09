@@ -135,6 +135,7 @@ export interface DocumentCategory {
   name: string;
   documentCount: number;
   description?: string;
+  yearFolders?: string[]; // Add year folders to category
 }
 
 export interface DocumentUploadData {
