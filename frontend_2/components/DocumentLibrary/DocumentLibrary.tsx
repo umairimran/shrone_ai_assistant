@@ -399,9 +399,16 @@ export function DocumentLibrary({
                     />
                   </div>
                   
-                  <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-2 truncate" title={document.name}>
-                    {document.name}
-                  </h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate flex-1" title={document.name}>
+                      {document.name}
+                    </h3>
+                    {document.version && (
+                      <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded whitespace-nowrap flex-shrink-0">
+                        v{document.version}
+                      </span>
+                    )}
+                  </div>
                   
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between items-center">
@@ -441,9 +448,16 @@ export function DocumentLibrary({
                   <div className="flex-1 grid grid-cols-4 gap-4 items-center">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">{getFileIcon(document.name)}</span>
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={document.name}>
-                        {document.name}
-                      </span>
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={document.name}>
+                          {document.name}
+                        </span>
+                        {document.version && (
+                          <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded whitespace-nowrap flex-shrink-0">
+                            v{document.version}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
                     <span className="text-gray-600 dark:text-gray-400">

@@ -152,7 +152,8 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       source_file: doc.source_file || doc.filename || 'unknown.pdf',
       // Pass through date/year so UI can group into the correct year folder
       issueDate: doc.issueDate || doc.issued_date || doc.issue_date || null,
-      year: typeof doc.year !== 'undefined' && doc.year !== null ? String(doc.year) : undefined
+      year: typeof doc.year !== 'undefined' && doc.year !== null ? String(doc.year) : undefined,
+      version: doc.version || '1'  // Add version field
     }));
   }, [isCacheReady, categories]);
 
@@ -165,13 +166,15 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       formData.append('document_number', ''); // Optional
       formData.append('issued_date', data.issueDate);
       formData.append('year', new Date(data.issueDate).getFullYear().toString());
+      formData.append('version', data.version || '1'); // Add version parameter
 
-      console.log('📤 Uploading document:', data.title, 'to category:', data.category);
+      console.log('📤 Uploading document:', data.title, 'to category:', data.category, 'version:', data.version || '1');
       console.log('📤 Upload data:', {
         title: data.title,
         category: data.category,
         issueDate: data.issueDate,
-        year: new Date(data.issueDate).getFullYear().toString()
+        year: new Date(data.issueDate).getFullYear().toString(),
+        version: data.version || '1'
       });
 
       // Get backend URL from config

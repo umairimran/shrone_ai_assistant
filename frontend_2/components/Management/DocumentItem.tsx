@@ -74,9 +74,16 @@ export function DocumentItem({ document, onDelete, onView, className }: Document
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-              {document.title || document.name}
-            </h4>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                {document.title || document.name}
+              </h4>
+              {document.version && (
+                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded whitespace-nowrap flex-shrink-0">
+                  v{document.version}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 ml-4">
               {onView && (
                 <button

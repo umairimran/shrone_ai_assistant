@@ -81,12 +81,12 @@ export function DocumentNode({
           className="flex-1 min-w-0 cursor-pointer overflow-hidden"
           onClick={handleDocumentClick}
         >
-          <div className="flex items-center gap-1 overflow-hidden">
+          <div className="flex items-center gap-2 overflow-hidden">
             <span className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors block flex-1">
               {document.title || document.name}
             </span>
             {document.version && (
-              <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap flex-shrink-0">
+              <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded whitespace-nowrap flex-shrink-0">
                 v{document.version}
               </span>
             )}

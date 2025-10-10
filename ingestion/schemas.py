@@ -4,7 +4,7 @@ Pydantic schemas for ACEP document processing with strict category validation.
 Phase 0: Core data models with strict category enum validation.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field, validator
 
 # Exact 5 categories as specified - matching actual folder names
@@ -49,13 +49,21 @@ class DocumentMeta(BaseModel):
     category: str = Field(..., description="Must be one of the 5 exact category values")
     issued_date: Optional[str] = Field(None, description="ISO date format")
     year: Optional[int] = None
-    version: int = Field(default=1, ge=1)
+    version: Union[str, int, float] = Field(default="1", description="Document version - accepts string, number, or float")
     is_current: bool = Field(default=True)
     
     @validator('category')
     def validate_category_field(cls, v):
         """Validate category against the 5 exact values."""
         return validate_category(v)
+    
+    @validator('version', pre=True)
+    def validate_version(cls, v):
+        """Convert version to string to support any format (numbers, strings, alphanumeric)."""
+        if v is None or v == "":
+            return "1"
+        # Convert to string to support any format
+        return str(v)
     
     @validator('issued_date')
     def validate_iso_date(cls, v):

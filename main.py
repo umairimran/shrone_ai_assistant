@@ -522,42 +522,9 @@ async def generate_and_store_embeddings(processed_data: dict, category: str) -> 
             title_slug = title.replace(" ", "_")
             source_file_path = f"processed_output/{category_slug}/{title_slug}.json"
         
-        # Determine next version based on existing chunks for the same title/category
-        next_version = 1
-        try:
-            existing = client.table(table_name).select("id, metadata").eq("metadata->>title", doc_info.get("title", "")).eq("metadata->>category", category).execute()
-            existing_versions = []
-            chunk_ids_to_delete = []
-            
-            for row in (existing.data or []):
-                md = row.get("metadata") or {}
-                v = md.get("doc_version")
-                if isinstance(v, int):
-                    existing_versions.append(v)
-                # Collect chunk IDs to delete
-                chunk_ids_to_delete.append(row.get("id"))
-            
-            next_version = (max(existing_versions) + 1) if existing_versions else 1
-
-            # If we are creating a new version, DELETE all old chunks permanently
-            if next_version > 1 and chunk_ids_to_delete:
-                print(f"🗑️ Deleting {len(chunk_ids_to_delete)} old chunks for '{doc_info.get('title', '')}' before uploading version {next_version}")
-                
-                # Delete in batches of 100 to avoid timeout
-                batch_size = 100
-                for i in range(0, len(chunk_ids_to_delete), batch_size):
-                    batch = chunk_ids_to_delete[i:i + batch_size]
-                    try:
-                        delete_result = client.table(table_name).delete().in_("id", batch).execute()
-                        print(f"✅ Deleted batch of {len(batch)} chunks")
-                    except Exception as delete_error:
-                        print(f"❌ Error deleting batch: {delete_error}")
-                        raise delete_error
-                
-                print(f"✅ Successfully deleted all old versions of '{doc_info.get('title', '')}'")
-        except Exception as e:
-            print(f"⚠️ Failed computing next version or deleting old chunks: {e}")
-            next_version = 1
+        # Use version from document metadata (already deleted old versions in upload_and_preprocess)
+        document_version = doc_info.get("version", "1")
+        print(f"📌 Using document version: {document_version}")
 
         for chunk in chunks:
             # Generate unique chunk ID
@@ -577,7 +544,8 @@ async def generate_and_store_embeddings(processed_data: dict, category: str) -> 
                 "heading_path": " > ".join(chunk.get("heading_path") or []),
                 "chunk_index": chunk.get("chunk_index"),
                 "source_file": source_file_path,
-                "doc_version": next_version,
+                "version": document_version,
+                "doc_version": document_version,  # Keep for backward compatibility
                 "is_current": True
             }
             
@@ -619,7 +587,8 @@ async def generate_and_store_embeddings(processed_data: dict, category: str) -> 
                     "issued_date": meta.get("issued_date", ""),
                     "year": meta.get("year"),
                     "document_number": meta.get("document_number", ""),
-                    "filename": meta.get("source_file", "")
+                    "filename": meta.get("source_file", ""),
+                    "version": meta.get("version", "1")
                 }
                 
                 row = {
@@ -639,7 +608,8 @@ async def generate_and_store_embeddings(processed_data: dict, category: str) -> 
                         "category": meta.get("category", ""),
                         "issued_date": meta.get("issued_date", ""),
                         "year": meta.get("year"),
-                        "document_number": meta.get("document_number", "")
+                        "document_number": meta.get("document_number", ""),
+                        "version": meta.get("version", "1")
                     },
                     "embedding": embedding
                 }
@@ -1203,7 +1173,7 @@ async def preprocess_document(
     document_number: Optional[str] = Form(None, description="Document number/identifier (optional) - Max 50 characters"),
     issued_date: Optional[str] = Form(None, description="Issue date in ISO format YYYY-MM-DD (optional)"),
     year: Optional[int] = Form(None, description="Document year (optional) - Range: 1970-2030"),
-    version: int = Form(1, description="Document version (default: 1) - Range: 1-100"),
+    version: Optional[str] = Form("1", description="Document version (default: '1') - accepts any string or number"),
     is_current: bool = Form(True, description="Is current version (default: true)"),
     ocr_language: str = Form("eng", description="OCR language code (default: eng) - See /ocr-languages for options"),
     ocr_dpi: int = Form(300, description="OCR DPI (default: 300) - Range: 150-600"),
@@ -1288,12 +1258,8 @@ async def preprocess_document(
             detail="Year must be between 1970 and 2030."
         )
     
-    # Validate version
-    if not (1 <= version <= 100):
-        raise HTTPException(
-            status_code=400,
-            detail="Version must be between 1 and 100."
-        )
+    # Version validation removed - now accepts any string/number format
+    # Version is converted to string in DocumentMeta validator
     
     # Validate OCR language
     if ocr_language not in OCR_LANGUAGES:
@@ -1605,23 +1571,38 @@ async def upload_and_preprocess(
     title: Optional[str] = Form(None, description="Document title (optional)"),
     document_number: Optional[str] = Form(None, description="Document number/identifier (optional)"),
     issued_date: Optional[str] = Form(None, description="Issue date in ISO format YYYY-MM-DD (optional)"),
-    year: Optional[int] = Form(None, description="Document year (optional)")
+    year: Optional[int] = Form(None, description="Document year (optional)"),
+    version: Optional[str] = Form("1", description="Document version (optional) - accepts any string or number")
 ):
     """
     Simple user-facing endpoint:
     1) Accept upload + minimal fields
-    2) Call preprocess_document with internal defaults
-    3) Save the resulting JSON for analysis
-    4) Return the same JSON plus saved_path
+    2) Delete old versions if uploading a new version of existing document
+    3) Call preprocess_document with internal defaults
+    4) Save the resulting JSON for analysis
+    5) Return the same JSON plus saved_path
     """
     INTERNAL_DEFAULTS = {
-        'version': 1,
         'is_current': True,
         'ocr_language': 'eng',
         'ocr_dpi': 300,
         'max_tokens_per_chunk': 1000,
         'overlap_tokens': 200
     }
+
+    # Delete old versions if title is provided and version is being updated
+    if title and version:
+        try:
+            print(f"🔄 Checking for existing versions of document: '{title}'")
+            # Delete all existing chunks/embeddings for this document before uploading new version
+            deletion_result = await delete_document_embeddings(title, category)
+            if deletion_result["status"] == "success" and deletion_result["chunks_deleted"] > 0:
+                print(f"✅ Deleted {deletion_result['chunks_deleted']} chunks from previous version(s)")
+            elif deletion_result["status"] == "warning":
+                print(f"⚠️ No previous version found - this is a new document")
+        except Exception as delete_error:
+            print(f"⚠️ Warning: Could not delete old versions: {delete_error}")
+            # Don't fail the upload if deletion fails - just log it
 
     # Call the engine endpoint (reuses all validations & processing)
     try:
@@ -1632,14 +1613,14 @@ async def upload_and_preprocess(
             document_number=document_number,
             issued_date=issued_date,
             year=year,
-            version=INTERNAL_DEFAULTS['version'],
+            version=version or "1",
             is_current=INTERNAL_DEFAULTS['is_current'],
             ocr_language=INTERNAL_DEFAULTS['ocr_language'],
             ocr_dpi=INTERNAL_DEFAULTS['ocr_dpi'],
             max_tokens_per_chunk=INTERNAL_DEFAULTS['max_tokens_per_chunk'],
             overlap_tokens=INTERNAL_DEFAULTS['overlap_tokens']
         )
-        print(f"✅ Main processing completed. Document: {result.document.title}, Chunks: {len(result.chunks)}")
+        print(f"✅ Main processing completed. Document: {result.document.title}, Version: {result.document.version}, Chunks: {len(result.chunks)}")
     except Exception as processing_error:
         print(f"❌ Error in main processing: {processing_error}")
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(processing_error)}")
@@ -1652,7 +1633,8 @@ async def upload_and_preprocess(
                 "document_number": result.document.document_number,
                 "category": result.document.category,
                 "issued_date": result.document.issued_date,
-                "year": result.document.year
+                "year": result.document.year,
+                "version": result.document.version
             },
             "chunks": [
                 {
@@ -1665,7 +1647,7 @@ async def upload_and_preprocess(
                 } for c in result.chunks
             ]
         }
-        print(f"✅ Payload built successfully with {len(payload['chunks'])} chunks")
+        print(f"✅ Payload built successfully with {len(payload['chunks'])} chunks, version: {result.document.version}")
     except Exception as payload_error:
         print(f"❌ Error building payload: {payload_error}")
         raise HTTPException(status_code=500, detail=f"Failed to build response payload: {str(payload_error)}")
@@ -1836,7 +1818,7 @@ async def batch_upload_and_preprocess(
                     category=category,
                     issued_date=issued_date,
                     year=year,
-                    version=1,
+                    version="1",
                     is_current=True,
                     ocr_language='eng',
                     ocr_dpi=300,
@@ -2642,7 +2624,7 @@ async def get_documents_by_category(category: str):
                             "document_number": metadata.get('document_number', title),
                             "issued_date": metadata.get('issued_date'),
                             "year": metadata.get('year'),
-                            "version": metadata.get('doc_version', 1),
+                            "version": metadata.get('version') or metadata.get('doc_version', "1"),
                             "is_current": bool(metadata.get('is_current', True)),
                             "chunks": doc_chunks
                         }
@@ -2653,15 +2635,16 @@ async def get_documents_by_category(category: str):
                     else:
                         # If multiple entries for same title, keep the current one or highest version
                         prev = unique_documents[doc_key]
-                        current_version = metadata.get('doc_version', 1)
+                        current_version = metadata.get('version') or metadata.get('doc_version', "1")
                         current_is_current = bool(metadata.get('is_current', True))
                         
                         # Prefer current version; if both current or both not, pick higher version
                         prev_is_current = prev.get("is_current", True)
-                        prev_version = prev.get("version", 1)
+                        prev_version = prev.get("version", "1")
                         
+                        # String comparison for versions (works for both numeric and alphanumeric)
                         should_replace = (current_is_current and not prev_is_current) or \
-                                       (current_is_current == prev_is_current and current_version > prev_version)
+                                       (current_is_current == prev_is_current and str(current_version) > str(prev_version))
                         
                         if should_replace:
                             original_filename = extract_original_filename(source_file)
