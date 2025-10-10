@@ -35,9 +35,16 @@ const nextConfig = {
   
   // Handle external dependencies
   transpilePackages: ['react-pdf'],
-
+ 
   // Allow all dev origins - NO MORE BLOCKING!
-  allowedDevOrigins: '*',
+  allowedDevOrigins: [
+    '3.81.163.149',
+    'http://3.81.163.149',
+    'http://3.81.163.149:3000',
+    '34.229.232.41',
+    'http://34.229.232.41',
+    'http://34.229.232.41:3000',
+  ],
   
   // Additional headers for CORS
   async headers() {
