@@ -39,7 +39,9 @@ const nextConfig = {
   allowedDevOrigins: [
     'http://34.229.232.41:3000', // with port 3000
     'http://34.229.232.41',      // without port
-    '34.229.232.41',             // just IP
+    '34.229.232.41', 
+    '3.81.163.149',
+    'http://3.81.163.149',            // just IP
   ],
 };
 
