@@ -3,7 +3,7 @@
   "comment2": "SINGLE POINT CONFIGURATION",
   "comment3": "Just change the IP below and rebuild!",
   "comment4": "========================================",
-  "current_ec2_ip": "54.158.225.97",
+  "current_ec2_ip": "34.229.223.135",
   "backend_port": "8000",
   "frontend_port": "3000"
 }
