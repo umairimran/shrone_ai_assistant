@@ -165,15 +165,15 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       formData.append('title', data.title);
       formData.append('document_number', ''); // Optional
       formData.append('issued_date', data.issueDate);
-      formData.append('year', new Date(data.issueDate).getFullYear().toString());
+      formData.append('year', data.year); // Use the year directly from user selection
       formData.append('version', data.version || '1'); // Add version parameter
 
-      console.log('📤 Uploading document:', data.title, 'to category:', data.category, 'version:', data.version || '1');
+      console.log('📤 Uploading document:', data.title, 'to category:', data.category, 'year:', data.year, 'version:', data.version || '1');
       console.log('📤 Upload data:', {
         title: data.title,
         category: data.category,
         issueDate: data.issueDate,
-        year: new Date(data.issueDate).getFullYear().toString(),
+        year: data.year, // Use the year from user selection
         version: data.version || '1'
       });
 

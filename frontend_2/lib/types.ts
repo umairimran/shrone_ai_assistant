@@ -143,6 +143,7 @@ export interface DocumentUploadData {
   version: string;
   issueDate: string;
   category: string;
+  year: string;
   file: File;
 }
 

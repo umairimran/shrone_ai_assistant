@@ -154,10 +154,29 @@ class DocumentCacheService {
     this.setCacheInitialized(false); // RESET FLAG TO FALSE
   }
 
+  // Clear ALL document caches - including EnhancedChatContext cache
+  static clearAllDocumentCaches(): void {
+    console.log('🧹 CLEARING ALL DOCUMENT CACHES');
+    if (typeof window === 'undefined') return;
+    
+    // Clear DocumentCacheService cache
+    localStorage.removeItem(this.CACHE_KEY);
+    this.setCacheInitialized(false);
+    
+    // Clear EnhancedChatContext document cache
+    localStorage.removeItem('leasing-ai-documents');
+    localStorage.removeItem('leasing-ai-active-document');
+    
+    // Dispatch custom event to notify EnhancedChatContext to refresh
+    window.dispatchEvent(new CustomEvent('documentCacheCleared'));
+    
+    console.log('✅ All document caches cleared');
+  }
+
   // Refresh cache after upload/delete - CLEAR THEN REINITIALIZE
   static async refreshCache(): Promise<void> {
     console.log('🔄 REFRESHING CACHE - Clear then reinitialize');
-    this.clearCache(); // Flag becomes FALSE
+    this.clearAllDocumentCaches(); // Clear ALL caches, not just DocumentCacheService
     await this.initializeCache(); // Call APIs again, flag becomes TRUE
   }
 

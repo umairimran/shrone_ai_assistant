@@ -1344,14 +1344,8 @@ async def preprocess_document(
                 detail="issued_date must be in ISO format YYYY-MM-DD (e.g., '2025-10-03')."
             )
     
-    # year must match issued_date.year when both provided
-    if year is not None and issued_date:
-        parsed_date = datetime.strptime(issued_date, "%Y-%m-%d").date()
-        if year != parsed_date.year:
-            raise HTTPException(
-                status_code=400,
-                detail="year must match issued_date.year"
-            )
+    # No year validation needed - user selected year is always correct
+    # The year comes from the folder structure the user chose
     
     # Create temporary file
     temp_file = None
@@ -1518,8 +1512,9 @@ async def preprocess_document(
             raise HTTPException(status_code=500, detail=f"Date inference failed: {str(date_error)}")
         
         try:
-            inferred_year = year or derive_year(cleaned_text, inferred_issued_date)
-            print(f"✅ Year derivation completed: {inferred_year}")
+            # Use the year provided by user (from year folder selection) - no derivation needed
+            inferred_year = year  # Simple assignment - whatever year folder the user selected
+            print(f"✅ Year set from user selection: {inferred_year}")
         except Exception as year_error:
             print(f"❌ Year derivation error: {year_error}")
             raise HTTPException(status_code=500, detail=f"Year derivation failed: {str(year_error)}")

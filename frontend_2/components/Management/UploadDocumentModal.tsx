@@ -35,7 +35,8 @@ export function UploadDocumentModal({
   const [formData, setFormData] = useState({
     title: existingTitle || '',
     version: '',
-    category: selectedCategory?.name || ''
+    category: selectedCategory?.name || '',
+    year: selectedYear || new Date().getFullYear().toString()
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -47,7 +48,8 @@ export function UploadDocumentModal({
     setFormData(prev => ({
       ...prev,
       title: existingTitle || prev.title,
-      category: selectedCategory?.name || ''
+      category: selectedCategory?.name || '',
+      year: selectedYear || prev.year
     }));
   }, [selectedCategory, existingTitle]);
 
@@ -55,14 +57,15 @@ export function UploadDocumentModal({
     setFormData({
       title: '',
       version: '',
-      category: selectedCategory?.name || ''
+      category: selectedCategory?.name || '',
+      year: selectedYear || new Date().getFullYear().toString()
     });
     setSelectedFile(null);
     setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, selectedYear]);
 
   const handleClose = useCallback(() => {
     if (!isUploading) {
@@ -93,8 +96,14 @@ export function UploadDocumentModal({
     if (!formData.title.trim()) return 'Title is required';
     if (!formData.version.trim()) return 'Version is required';
     if (!formData.category) return 'Category is required';
+    if (!formData.year.trim()) return 'Year is required';
     if (!selectedFile) return 'Please select a file';
-    if (!selectedYear) return 'Please select a year folder first';
+    
+    // Validate year
+    const year = parseInt(formData.year);
+    if (isNaN(year) || year < 1970 || year > 2030) {
+      return 'Year must be between 1970 and 2030';
+    }
     
     // Validate file size (50MB limit as per backend)
     const sizeMB = selectedFile.size / (1024 * 1024);
@@ -108,7 +117,7 @@ export function UploadDocumentModal({
     }
     
     return null;
-  }, [formData, selectedFile, selectedYear]);
+  }, [formData, selectedFile]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,14 +138,15 @@ export function UploadDocumentModal({
     setError(null);
 
     try {
-      // Use selected year as the date (set to January 1st of that year)
-      const issueDate = selectedYear ? `${selectedYear}-01-01` : new Date().toISOString().split('T')[0];
+      // Use the year from form data for the metadata
+      const issueDate = `${formData.year}-01-01`; // Set to January 1st of the selected year
       
       const uploadData: DocumentUploadData = {
         title: formData.title.trim(),
         version: formData.version.trim(),
         issueDate: issueDate,
         category: formData.category,
+        year: formData.year,
         file: selectedFile
       };
 
@@ -235,6 +245,33 @@ export function UploadDocumentModal({
                 placeholder="e.g., 1.0, v2.1, Rev A"
                 disabled={isUploading}
               />
+            </div>
+
+            {/* Year */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Year <span className="text-red-500">*</span>
+                {selectedYear && <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">(From folder: {selectedYear})</span>}
+              </label>
+              <input
+                type="number"
+                value={formData.year}
+                onChange={(e) => handleInputChange('year', e.target.value)}
+                className={cn(
+                  "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white",
+                  selectedYear && "bg-gray-100 dark:bg-gray-700 cursor-not-allowed"
+                )}
+                placeholder="e.g., 2024"
+                min="1970"
+                max="2030"
+                disabled={isUploading || !!selectedYear}
+                readOnly={!!selectedYear}
+              />
+              {selectedYear && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Year is automatically set from the selected folder
+                </p>
+              )}
             </div>
 
             {/* Category */}

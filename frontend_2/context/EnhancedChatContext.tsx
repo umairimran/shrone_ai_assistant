@@ -232,6 +232,27 @@ export function EnhancedChatProvider({ children }: { children: React.ReactNode }
     setIsLoadingConversations(false);
   }, []);
 
+  // Listen for document cache clearing events from ManagementContext
+  useEffect(() => {
+    const handleCacheCleared = () => {
+      console.log('🔄 EnhancedChatContext: Cache cleared event received, clearing documents');
+      setState(prev => ({
+        ...prev,
+        documents: [], // Clear documents to force refresh
+        activeDocumentId: null
+      }));
+      persistActiveDocument(null);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('documentCacheCleared', handleCacheCleared);
+      
+      return () => {
+        window.removeEventListener('documentCacheCleared', handleCacheCleared);
+      };
+    }
+  }, []);
+
   // Update conversation when messages change
   useEffect(() => {
     if (!currentConversationId || state.messages.length === 0) return;
