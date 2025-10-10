@@ -1116,19 +1116,35 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# =====================================================
+# SINGLE POINT CORS CONFIGURATION
+# =====================================================
+# Add new IPs here when you change EC2 instances
+ALLOWED_CORS_ORIGINS = [
+    # Current EC2 instance (54.158.225.97)
+    "http://54.158.225.97:3000",
+    "https://54.158.225.97:3000",
+    "http://54.158.225.97:8000",
+    "http://ec2-54-158-225-97.compute-1.amazonaws.com:3000",
+    "https://ec2-54-158-225-97.compute-1.amazonaws.com:3000",
+    # Old EC2 instances (keeping for backward compatibility)
+    "http://34.229.232.41:3000",
+    "https://34.229.232.41:3000",
+    "http://3.81.163.149:3000",
+    "https://3.81.163.149:3000",
+    # Localhost for development
+    "http://localhost:3000", 
+    "http://127.0.0.1:3000",
+    "*"  # Allow all origins for maximum flexibility
+]
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000",
-        "http://34.229.232.41:3000",  # Your deployed frontend
-        "https://34.229.232.41:3000",  # HTTPS version
-        "*"  # Allow all origins for deployment flexibility
-    ],
+    allow_origins=ALLOWED_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly allow OPTIONS
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 # Custom exception handlers
@@ -1321,13 +1337,16 @@ async def preprocess_document(
     # Create temporary file
     temp_file = None
     try:
+        print(f"📝 Creating temporary file with extension: {file_ext}")
         # Create temporary file with original extension
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
             temp_file.write(file_content)
             temp_file_path = temp_file.name
+        print(f"✅ Temporary file created: {temp_file_path}")
         
         # Extract text based on file type with enhanced parameters
         try:
+            print(f"🔍 Starting text extraction for {file_ext} file...")
             if file_ext == '.pdf':
                 full_text, page_texts = extract_pdf(
                     Path(temp_file_path), 
@@ -1338,6 +1357,7 @@ async def preprocess_document(
                 full_text, page_texts = extract_docx(Path(temp_file_path))
             else:  # .txt or .md
                 full_text, page_texts = extract_txt_md(Path(temp_file_path))
+            print(f"✅ Text extraction completed. Pages: {len(page_texts)}, Total text length: {len(full_text)}")
         except Exception as extraction_error:
             print(f"ERROR: Text extraction failed: {extraction_error}")
             raise HTTPException(
@@ -1387,16 +1407,21 @@ async def preprocess_document(
         
         # Detect structure to create blocks with error handling
         try:
+            print(f"🔨 Building structured blocks from {len(cleaned_pages)} pages...")
             blocks = split_into_blocks(cleaned_pages)
+            print(f"✅ Created {len(blocks)} blocks")
         except Exception as structure_error:
             print(f"WARNING: Structure detection failed, using simple blocks: {structure_error}")
             # Fallback to simple page-based blocks
             blocks = [{'text': page, 'page_start': i+1, 'page_end': i+1, 'heading_path': []} 
                      for i, page in enumerate(cleaned_pages) if page.strip()]
+            print(f"✅ Created {len(blocks)} simple blocks")
         
         # Chunk the blocks with error handling
         try:
+            print(f"✂️ Starting chunking (max_tokens={max_tokens_per_chunk}, overlap={overlap_tokens})...")
             chunk_dicts = chunk_blocks(blocks, max_tokens=max_tokens_per_chunk, overlap_tokens=overlap_tokens)
+            print(f"✅ Chunking completed: {len(chunk_dicts)} chunks created")
         except Exception as chunking_error:
             print(f"ERROR: Chunking failed: {chunking_error}")
             raise HTTPException(
@@ -1606,6 +1631,10 @@ async def upload_and_preprocess(
 
     # Call the engine endpoint (reuses all validations & processing)
     try:
+        print(f"🔄 Starting document preprocessing for: {title or file.filename}")
+        print(f"📄 File size: {len(await file.read()) / 1024 / 1024:.2f} MB")
+        await file.seek(0)  # Reset file pointer after reading size
+        
         result: PreprocessResponse = await preprocess_document(
             file=file,
             category=category,
@@ -1623,6 +1652,8 @@ async def upload_and_preprocess(
         print(f"✅ Main processing completed. Document: {result.document.title}, Version: {result.document.version}, Chunks: {len(result.chunks)}")
     except Exception as processing_error:
         print(f"❌ Error in main processing: {processing_error}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(processing_error)}")
 
     # Build the public JSON payload (same shape you already return)

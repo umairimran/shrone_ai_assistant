@@ -36,14 +36,27 @@ const nextConfig = {
   // Handle external dependencies
   transpilePackages: ['react-pdf'],
  
-  // Allow all dev origins - NO MORE BLOCKING!
+  // SINGLE POINT CORS CONFIGURATION - Add new IPs here
   allowedDevOrigins: [
+    // New EC2 instance
+    '54.158.225.97',
+    'http://54.158.225.97',
+    'http://54.158.225.97:3000',
+    'http://54.158.225.97:8000',
+    'ec2-54-158-225-97.compute-1.amazonaws.com',
+    'http://ec2-54-158-225-97.compute-1.amazonaws.com',
+    'http://ec2-54-158-225-97.compute-1.amazonaws.com:3000',
+    // Old IPs (keeping for backward compatibility)
     '3.81.163.149',
     'http://3.81.163.149',
     'http://3.81.163.149:3000',
     '34.229.232.41',
     'http://34.229.232.41',
     'http://34.229.232.41:3000',
+    // Localhost
+    'localhost',
+    'http://localhost:3000',
+    'http://localhost:8000',
   ],
   
   // Additional headers for CORS
