@@ -14,6 +14,8 @@ interface YearNodeProps {
   onUploadDocument: (categoryId: string, year: string) => void;
   onDocumentSelect?: (document: any) => void;
   onDocumentDelete?: (documentId: string) => Promise<boolean>;
+  onDeleteYearFolder?: (categoryId: string, year: string) => void;
+  onUploadNewVersion?: (document: any) => void;
 }
 
 export function YearNode({
@@ -24,7 +26,9 @@ export function YearNode({
   onToggleYear,
   onUploadDocument,
   onDocumentSelect,
-  onDocumentDelete
+  onDocumentDelete,
+  onDeleteYearFolder,
+  onUploadNewVersion
 }: YearNodeProps) {
   const handleYearToggle = () => {
     onToggleYear(categoryId, yearFolder.year);
@@ -33,6 +37,13 @@ export function YearNode({
   const handleUploadDocument = (e: React.MouseEvent) => {
     e.stopPropagation();
     onUploadDocument(categoryId, yearFolder.year);
+  };
+
+  const handleDeleteFolder = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (yearFolder.documentCount === 0 && onDeleteYearFolder) {
+      onDeleteYearFolder(categoryId, yearFolder.year);
+    }
   };
 
   return (
@@ -80,16 +91,30 @@ export function YearNode({
           </div>
         </div>
 
-        {/* Upload Document Button */}
+        {/* Action Buttons */}
         {isExpanded && (
-          <button
-            onClick={handleUploadDocument}
-            className="flex-shrink-0 px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
-            title="Upload document to this year"
-          >
-            <span className="hidden sm:inline">+ Upload Document</span>
-            <span className="sm:hidden">+ Upload</span>
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Upload Document Button */}
+            <button
+              onClick={handleUploadDocument}
+              className="flex-shrink-0 px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
+              title="Upload document to this year"
+            >
+              <span className="hidden sm:inline">+ Upload Document</span>
+              <span className="sm:hidden">+ Upload</span>
+            </button>
+            
+            {/* Delete Empty Folder Button */}
+            {yearFolder.documentCount === 0 && onDeleteYearFolder && (
+              <button
+                onClick={handleDeleteFolder}
+                className="flex-shrink-0 px-2 py-1 text-[10px] sm:text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors whitespace-nowrap"
+                title="Delete empty year folder"
+              >
+                🗑️
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -103,6 +128,7 @@ export function YearNode({
                 document={document}
                 onSelect={onDocumentSelect}
                 onDelete={onDocumentDelete}
+                onUploadNewVersion={onUploadNewVersion}
               />
             ))
           ) : (

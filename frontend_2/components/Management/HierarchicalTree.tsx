@@ -12,19 +12,22 @@ interface HierarchicalTreeProps {
   onDocumentSelect?: (document: any) => void;
   onDocumentDelete?: (documentId: string) => Promise<boolean>;
   onUploadDocument?: (categoryId: string, year?: string) => void;
+  onUploadNewVersion?: (document: any) => void;
 }
 
 export function HierarchicalTree({ 
   className, 
   onDocumentSelect, 
   onDocumentDelete,
-  onUploadDocument 
+  onUploadDocument,
+  onUploadNewVersion
 }: HierarchicalTreeProps) {
   const { 
     categories, 
     getDocumentsByCategory, 
     addCategory,
-    addYearFolder
+    addYearFolder,
+    removeYearFolder
   } = useManagement();
 
   const [expandedState, setExpandedState] = useState<TreeExpandedState>({});
@@ -39,7 +42,10 @@ export function HierarchicalTree({
       // Group documents by year
       const yearGroups: { [year: string]: any[] } = {};
       documents.forEach(doc => {
-        const year = doc.issueDate ? new Date(doc.issueDate).getFullYear().toString() : '2024';
+        // Prefer explicit year if provided, else derive from issueDate, else fallback
+        const explicitYear = (doc as any).year ? String((doc as any).year) : undefined;
+        const derivedYear = doc.issueDate ? new Date(doc.issueDate).getFullYear().toString() : undefined;
+        const year = explicitYear || derivedYear || '2024';
         if (!yearGroups[year]) {
           yearGroups[year] = [];
         }
@@ -113,6 +119,11 @@ export function HierarchicalTree({
     onUploadDocument?.(categoryId, year);
   }, [onUploadDocument]);
 
+  const handleDeleteYearFolder = useCallback((categoryId: string, year: string) => {
+    console.log('🗑️ Deleting year folder:', year, 'from category:', categoryId);
+    removeYearFolder(categoryId, year);
+  }, [removeYearFolder]);
+
   return (
     <div className={cn('space-y-2', className)}>
       {/* Tree Nodes */}
@@ -129,6 +140,8 @@ export function HierarchicalTree({
             onUploadDocument={handleUploadDocument}
             onDocumentSelect={onDocumentSelect}
             onDocumentDelete={onDocumentDelete}
+            onDeleteYearFolder={handleDeleteYearFolder}
+            onUploadNewVersion={onUploadNewVersion}
           />
         ))}
       </div>

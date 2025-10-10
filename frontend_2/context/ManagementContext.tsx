@@ -15,6 +15,7 @@ interface ManagementContextValue {
   deleteDocument: (documentTitle: string, category: string) => Promise<boolean>;
   addCategory: (name: string, description?: string) => void;
   addYearFolder: (categoryId: string, year: string) => void;
+  removeYearFolder: (categoryId: string, year: string) => void;
 }
 
 const ManagementContext = createContext<ManagementContextValue | undefined>(undefined);
@@ -76,6 +77,30 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     const cacheReady = DocumentCacheService.isCacheInitialized();
     setIsCacheReady(cacheReady);
     
+    // Load year folders from localStorage
+    try {
+      const savedYearFolders = localStorage.getItem('shrone_year_folders');
+      if (savedYearFolders) {
+        const yearFoldersData = JSON.parse(savedYearFolders);
+        console.log('📁 Loading year folders from localStorage:', yearFoldersData);
+        
+        setCategories(prevCategories => {
+          return prevCategories.map(category => {
+            const savedYears = yearFoldersData[category.id];
+            if (savedYears && Array.isArray(savedYears)) {
+              return {
+                ...category,
+                yearFolders: savedYears
+              };
+            }
+            return category;
+          });
+        });
+      }
+    } catch (error) {
+      console.error('❌ Failed to load year folders from localStorage:', error);
+    }
+    
     if (cacheReady) {
       updateCategoryCounts();
     }
@@ -124,7 +149,10 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       category: categoryName,
       uploadedAt: doc.uploadedAt || new Date().toISOString(),
       filename: doc.filename || doc.name || 'unknown.pdf',
-      source_file: doc.source_file || doc.filename || 'unknown.pdf'
+      source_file: doc.source_file || doc.filename || 'unknown.pdf',
+      // Pass through date/year so UI can group into the correct year folder
+      issueDate: doc.issueDate || doc.issued_date || doc.issue_date || null,
+      year: typeof doc.year !== 'undefined' && doc.year !== null ? String(doc.year) : undefined
     }));
   }, [isCacheReady, categories]);
 
@@ -177,6 +205,9 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
       console.log('🔄 Refreshing cache...');
       await DocumentCacheService.refreshCache();
       await initializeCache(); // Update context state
+      
+      // Force update category counts to reflect new document
+      updateCategoryCounts();
       console.log('✅ Cache refreshed successfully');
 
       return 'ok';
@@ -254,7 +285,7 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     console.log('📁 Creating year folder for category:', categoryId, 'year:', year);
     
     setCategories(prevCategories => {
-      return prevCategories.map(category => {
+      const updatedCategories = prevCategories.map(category => {
         if (category.id === categoryId) {
           // Initialize yearFolders array if it doesn't exist
           const existingYears = category.yearFolders || [];
@@ -279,6 +310,62 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
         }
         return category;
       });
+      
+      // Persist year folders to localStorage
+      try {
+        const yearFoldersData = updatedCategories.reduce((acc, category) => {
+          if (category.yearFolders && category.yearFolders.length > 0) {
+            acc[category.id] = category.yearFolders;
+          }
+          return acc;
+        }, {} as Record<string, string[]>);
+        
+        localStorage.setItem('shrone_year_folders', JSON.stringify(yearFoldersData));
+        console.log('💾 Year folders persisted to localStorage:', yearFoldersData);
+      } catch (error) {
+        console.error('❌ Failed to persist year folders:', error);
+      }
+      
+      return updatedCategories;
+    });
+  }, []);
+
+  const removeYearFolder = useCallback((categoryId: string, year: string) => {
+    console.log('🗑️ Removing year folder for category:', categoryId, 'year:', year);
+    
+    setCategories(prevCategories => {
+      const updatedCategories = prevCategories.map(category => {
+        if (category.id === categoryId) {
+          const existingYears = category.yearFolders || [];
+          const updatedYearFolders = existingYears.filter(y => y !== year);
+          
+          console.log('✅ Year folder removed:', year, 'from category:', category.name);
+          console.log('📁 Updated year folders:', updatedYearFolders);
+          
+          return {
+            ...category,
+            yearFolders: updatedYearFolders
+          };
+        }
+        return category;
+      });
+      
+      // Persist year folders to localStorage
+      try {
+        const yearFoldersData = updatedCategories.reduce((acc, category) => {
+          if (category.yearFolders && category.yearFolders.length > 0) {
+            acc[category.id] = category.yearFolders;
+          }
+          return acc;
+        }, {} as Record<string, string[]>);
+        
+        localStorage.setItem('shrone_year_folders', JSON.stringify(yearFoldersData));
+        console.log('💾 Year folders updated in localStorage:', yearFoldersData);
+      } catch (error) {
+        console.error('❌ Failed to persist year folders:', error);
+      }
+      
+      return updatedCategories;
     });
   }, []);
 
@@ -291,7 +378,8 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     uploadDocument,
     deleteDocument,
     addCategory,
-    addYearFolder
+    addYearFolder,
+    removeYearFolder
   };
 
   return (

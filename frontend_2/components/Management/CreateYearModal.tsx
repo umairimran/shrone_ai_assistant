@@ -184,11 +184,6 @@ export function CreateYearModal({
               </div>
             )}
 
-            {/* Note about automatic year creation */}
-            <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-md">
-              Note: Year folders are typically created automatically when you upload documents with specific issue dates. This tool is for creating placeholder folders.
-            </div>
-
             {/* Submit Buttons */}
             <div className="flex gap-3 pt-4">
               <button

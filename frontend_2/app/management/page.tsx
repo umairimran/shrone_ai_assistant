@@ -26,7 +26,7 @@ function ManagementPageContent() {
   
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false);
-  const [uploadContext, setUploadContext] = useState<{categoryId: string, year?: string} | null>(null);
+  const [uploadContext, setUploadContext] = useState<{categoryId: string, year?: string, existingTitle?: string, isNewVersion?: boolean} | null>(null);
   const [isClient, setIsClient] = useState(false);
 
   // Handle client-side hydration
@@ -67,6 +67,20 @@ function ManagementPageContent() {
     const category = categories.find(cat => cat.id === categoryId);
     if (category) {
       setUploadContext({ categoryId, year });
+      setShowUploadModal(true);
+    }
+  };
+
+  const handleUploadNewVersion = (document: any) => {
+    console.log('📝 Uploading new version for document:', document);
+    const category = categories.find(cat => cat.name === document.category);
+    if (category) {
+      setUploadContext({ 
+        categoryId: category.id, 
+        year: document.year || (document.issueDate ? new Date(document.issueDate).getFullYear().toString() : undefined),
+        existingTitle: document.title,
+        isNewVersion: true
+      });
       setShowUploadModal(true);
     }
   };
@@ -119,10 +133,21 @@ function ManagementPageContent() {
         return false;
       }
 
-      console.log('🗑️ Deleting document:', targetDocument.title, 'from category:', targetCategory.name);
+      // Use the clean title, not the source_file path
+      const documentTitle = targetDocument.title || targetDocument.name || '';
       
-      // Call the delete function with title and category
-      const success = await deleteDocument(targetDocument.title || targetDocument.name, targetCategory.name);
+      // Remove any path prefixes if present (e.g., "processed output\Category\")
+      const cleanTitle = documentTitle.includes('\\') || documentTitle.includes('/') 
+        ? documentTitle.split(/[\\\/]/).pop() || documentTitle
+        : documentTitle;
+      
+      // Remove file extension for matching
+      const titleWithoutExtension = cleanTitle.replace(/\.(pdf|docx|txt|md)$/i, '');
+      
+      console.log('🗑️ Deleting document:', titleWithoutExtension, 'from category:', targetCategory.name);
+      
+      // Call the delete function with clean title and category
+      const success = await deleteDocument(titleWithoutExtension, targetCategory.name);
       
       return success;
     } catch (error) {
@@ -207,6 +232,7 @@ function ManagementPageContent() {
               }}
               onDocumentDelete={handleDeleteDocument}
               onUploadDocument={handleTreeUploadDocument}
+              onUploadNewVersion={handleUploadNewVersion}
             />
           </div>
         </div>
@@ -220,6 +246,9 @@ function ManagementPageContent() {
           onUpload={uploadDocument}
           categories={categories}
           selectedCategoryId={uploadContext?.categoryId || null}
+          selectedYear={uploadContext?.year || null}
+          existingTitle={uploadContext?.existingTitle || null}
+          isNewVersion={uploadContext?.isNewVersion || false}
         />
       )}
 

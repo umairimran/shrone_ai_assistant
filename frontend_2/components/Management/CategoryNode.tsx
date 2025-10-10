@@ -15,6 +15,8 @@ interface CategoryNodeProps {
   onUploadDocument: (categoryId: string, year?: string) => void;
   onDocumentSelect?: (document: any) => void;
   onDocumentDelete?: (documentId: string) => Promise<boolean>;
+  onDeleteYearFolder?: (categoryId: string, year: string) => void;
+  onUploadNewVersion?: (document: any) => void;
 }
 
 export function CategoryNode({
@@ -26,7 +28,9 @@ export function CategoryNode({
   onNewYearFolder,
   onUploadDocument,
   onDocumentSelect,
-  onDocumentDelete
+  onDocumentDelete,
+  onDeleteYearFolder,
+  onUploadNewVersion
 }: CategoryNodeProps) {
   const handleCategoryToggle = () => {
     onToggleCategory(node.id);
@@ -112,20 +116,15 @@ export function CategoryNode({
                 onUploadDocument={onUploadDocument}
                 onDocumentSelect={onDocumentSelect}
                 onDocumentDelete={onDocumentDelete}
+                onDeleteYearFolder={onDeleteYearFolder}
+                onUploadNewVersion={onUploadNewVersion}
               />
             ))
           ) : (
             <div className="flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-3 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
               <div className="w-4 h-4" /> {/* Spacer for alignment */}
               <div className="text-base sm:text-lg">📂</div>
-              <span className="flex-1 min-w-0">No documents yet</span>
-              <button
-                onClick={() => onUploadDocument(node.id)}
-                className="ml-auto px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
-              >
-                <span className="hidden sm:inline">Upload First Document</span>
-                <span className="sm:hidden">Upload</span>
-              </button>
+              <span className="flex-1 min-w-0">No year folders yet. Create a year folder to upload documents.</span>
             </div>
           )}
         </div>

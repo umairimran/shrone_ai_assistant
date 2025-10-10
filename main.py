@@ -522,6 +522,43 @@ async def generate_and_store_embeddings(processed_data: dict, category: str) -> 
             title_slug = title.replace(" ", "_")
             source_file_path = f"processed_output/{category_slug}/{title_slug}.json"
         
+        # Determine next version based on existing chunks for the same title/category
+        next_version = 1
+        try:
+            existing = client.table(table_name).select("id, metadata").eq("metadata->>title", doc_info.get("title", "")).eq("metadata->>category", category).execute()
+            existing_versions = []
+            chunk_ids_to_delete = []
+            
+            for row in (existing.data or []):
+                md = row.get("metadata") or {}
+                v = md.get("doc_version")
+                if isinstance(v, int):
+                    existing_versions.append(v)
+                # Collect chunk IDs to delete
+                chunk_ids_to_delete.append(row.get("id"))
+            
+            next_version = (max(existing_versions) + 1) if existing_versions else 1
+
+            # If we are creating a new version, DELETE all old chunks permanently
+            if next_version > 1 and chunk_ids_to_delete:
+                print(f"🗑️ Deleting {len(chunk_ids_to_delete)} old chunks for '{doc_info.get('title', '')}' before uploading version {next_version}")
+                
+                # Delete in batches of 100 to avoid timeout
+                batch_size = 100
+                for i in range(0, len(chunk_ids_to_delete), batch_size):
+                    batch = chunk_ids_to_delete[i:i + batch_size]
+                    try:
+                        delete_result = client.table(table_name).delete().in_("id", batch).execute()
+                        print(f"✅ Deleted batch of {len(batch)} chunks")
+                    except Exception as delete_error:
+                        print(f"❌ Error deleting batch: {delete_error}")
+                        raise delete_error
+                
+                print(f"✅ Successfully deleted all old versions of '{doc_info.get('title', '')}'")
+        except Exception as e:
+            print(f"⚠️ Failed computing next version or deleting old chunks: {e}")
+            next_version = 1
+
         for chunk in chunks:
             # Generate unique chunk ID
             chunk_text = chunk.get("text", "")
@@ -540,7 +577,7 @@ async def generate_and_store_embeddings(processed_data: dict, category: str) -> 
                 "heading_path": " > ".join(chunk.get("heading_path") or []),
                 "chunk_index": chunk.get("chunk_index"),
                 "source_file": source_file_path,
-                "doc_version": 1,
+                "doc_version": next_version,
                 "is_current": True
             }
             
@@ -2588,7 +2625,10 @@ async def get_documents_by_category(category: str):
                     # Remove timestamp duplicates - keep only unique base names
                     base_source = re.sub(r'__\d+\.json$', '', source_file)
                     
-                    if base_source not in unique_documents:
+                    # Group by title instead of source_file to properly handle versions
+                    doc_key = title or base_source
+                    
+                    if doc_key not in unique_documents:
                         original_filename = extract_original_filename(source_file)
                         
                         # Count chunks for this document
@@ -2597,16 +2637,50 @@ async def get_documents_by_category(category: str):
                         
                         doc_info = {
                             "filename": original_filename,
+                            "source_file": source_file,
                             "title": title or original_filename,
                             "document_number": metadata.get('document_number', title),
                             "issued_date": metadata.get('issued_date'),
                             "year": metadata.get('year'),
+                            "version": metadata.get('doc_version', 1),
+                            "is_current": bool(metadata.get('is_current', True)),
                             "chunks": doc_chunks
                         }
                         
                         # Clean up None values
                         doc_info = {k: v for k, v in doc_info.items() if v is not None}
-                        unique_documents[base_source] = doc_info
+                        unique_documents[doc_key] = doc_info
+                    else:
+                        # If multiple entries for same title, keep the current one or highest version
+                        prev = unique_documents[doc_key]
+                        current_version = metadata.get('doc_version', 1)
+                        current_is_current = bool(metadata.get('is_current', True))
+                        
+                        # Prefer current version; if both current or both not, pick higher version
+                        prev_is_current = prev.get("is_current", True)
+                        prev_version = prev.get("version", 1)
+                        
+                        should_replace = (current_is_current and not prev_is_current) or \
+                                       (current_is_current == prev_is_current and current_version > prev_version)
+                        
+                        if should_replace:
+                            original_filename = extract_original_filename(source_file)
+                            doc_chunks = sum(1 for r in result.data 
+                                           if r.get('metadata', {}).get('source_file', '').startswith(base_source))
+                            
+                            doc_info = {
+                                "filename": original_filename,
+                                "source_file": source_file,
+                                "title": title or original_filename,
+                                "document_number": metadata.get('document_number', title),
+                                "issued_date": metadata.get('issued_date'),
+                                "year": metadata.get('year'),
+                                "version": current_version,
+                                "is_current": current_is_current,
+                                "chunks": doc_chunks
+                            }
+                            doc_info = {k: v for k, v in doc_info.items() if v is not None}
+                            unique_documents[doc_key] = doc_info
         
         # Convert to list and sort
         documents_list = list(unique_documents.values())

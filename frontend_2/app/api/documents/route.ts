@@ -39,15 +39,21 @@ export async function GET(request: Request) {
     // Transform the backend response to match frontend expectations
     const transformedDocuments = data.documents.map((doc: any) => ({
       id: doc.id || `doc-${Date.now()}-${Math.random()}`,
-      name: doc.document_name || doc.filename || 'Unknown Document',
+      name: doc.filename || doc.document_name || 'Unknown Document',
       filename: doc.filename || doc.document_name,
       sizeMB: 0, // Size not available from backend
       type: doc.filename ? doc.filename.split('.').pop()?.toLowerCase() || 'pdf' : 'pdf',
       status: 'uploaded',
-      title: doc.document_name || doc.filename || 'Unknown Document',
+      title: doc.title || doc.document_name || doc.filename || 'Unknown Document',
       category: category,
       uploadedAt: new Date().toISOString(), // Not available from backend
-      source_file: doc.source_file
+      source_file: doc.source_file,
+      // Pass through date/year so the UI can group by year folders correctly
+      issueDate: doc.issued_date || doc.issue_date || doc.issueDate || null,
+      year: (doc.year !== undefined && doc.year !== null) ? String(doc.year) : undefined,
+      // Pass through version information
+      version: doc.version || 1,
+      is_current: doc.is_current !== false
     }));
     
     return NextResponse.json({

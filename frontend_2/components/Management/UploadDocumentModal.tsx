@@ -10,6 +10,9 @@ interface UploadDocumentModalProps {
   onUpload: (_data: DocumentUploadData) => Promise<'ok' | 'invalid' | 'failed'>;
   categories: DocumentCategory[];
   selectedCategoryId?: string | null;
+  selectedYear?: string | null;
+  existingTitle?: string | null;
+  isNewVersion?: boolean;
   className?: string;
 }
 
@@ -19,6 +22,9 @@ export function UploadDocumentModal({
   onUpload,
   categories,
   selectedCategoryId,
+  selectedYear,
+  existingTitle,
+  isNewVersion = false,
   className
 }: UploadDocumentModalProps) {
   // Find the selected category name from the ID
@@ -27,9 +33,8 @@ export function UploadDocumentModal({
     : null;
   
   const [formData, setFormData] = useState({
-    title: '',
+    title: existingTitle || '',
     version: '',
-    issueDate: '',
     category: selectedCategory?.name || ''
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -37,19 +42,19 @@ export function UploadDocumentModal({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Update form when selectedCategoryId changes
+  // Update form when selectedCategoryId or existingTitle changes
   useEffect(() => {
     setFormData(prev => ({
       ...prev,
+      title: existingTitle || prev.title,
       category: selectedCategory?.name || ''
     }));
-  }, [selectedCategory]);
+  }, [selectedCategory, existingTitle]);
 
   const resetForm = useCallback(() => {
     setFormData({
       title: '',
       version: '',
-      issueDate: '',
       category: selectedCategory?.name || ''
     });
     setSelectedFile(null);
@@ -87,9 +92,9 @@ export function UploadDocumentModal({
   const validateForm = useCallback((): string | null => {
     if (!formData.title.trim()) return 'Title is required';
     if (!formData.version.trim()) return 'Version is required';
-    if (!formData.issueDate) return 'Issue date is required';
     if (!formData.category) return 'Category is required';
     if (!selectedFile) return 'Please select a file';
+    if (!selectedYear) return 'Please select a year folder first';
     
     // Validate file size (50MB limit as per backend)
     const sizeMB = selectedFile.size / (1024 * 1024);
@@ -103,7 +108,7 @@ export function UploadDocumentModal({
     }
     
     return null;
-  }, [formData, selectedFile]);
+  }, [formData, selectedFile, selectedYear]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,10 +129,13 @@ export function UploadDocumentModal({
     setError(null);
 
     try {
+      // Use selected year as the date (set to January 1st of that year)
+      const issueDate = selectedYear ? `${selectedYear}-01-01` : new Date().toISOString().split('T')[0];
+      
       const uploadData: DocumentUploadData = {
         title: formData.title.trim(),
         version: formData.version.trim(),
-        issueDate: formData.issueDate,
+        issueDate: issueDate,
         category: formData.category,
         file: selectedFile
       };
@@ -193,15 +201,25 @@ export function UploadDocumentModal({
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Title <span className="text-red-500">*</span>
+                {isNewVersion && <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">(New Version)</span>}
               </label>
               <input
                 type="text"
                 value={formData.title}
                 onChange={(e) => handleInputChange('title', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+                className={cn(
+                  "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white",
+                  isNewVersion && "bg-gray-100 dark:bg-gray-700 cursor-not-allowed"
+                )}
                 placeholder="Enter document title"
-                disabled={isUploading}
+                disabled={isUploading || isNewVersion}
+                readOnly={isNewVersion}
               />
+              {isNewVersion && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Title is locked when uploading a new version
+                </p>
+              )}
             </div>
 
             {/* Version */}
@@ -219,44 +237,8 @@ export function UploadDocumentModal({
               />
             </div>
 
-            {/* Issue Date */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Issue Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={formData.issueDate}
-                onChange={(e) => handleInputChange('issueDate', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
-                disabled={isUploading}
-              />
-            </div>
-
             {/* Category */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Category <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.category}
-                onChange={(e) => handleInputChange('category', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={isUploading || !!selectedCategoryId}
-              >
-                <option value="">Select a category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.name}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              {selectedCategoryId && (
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Category is pre-selected for this upload
-                </p>
-              )}
-            </div>
+            {/** Category selection hidden. `formData.category` is set from the selected node and used internally. **/}
 
             {/* File Upload */}
             <div>
