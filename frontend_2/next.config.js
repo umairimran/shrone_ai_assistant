@@ -36,13 +36,22 @@ const nextConfig = {
   // Handle external dependencies
   transpilePackages: ['react-pdf'],
 
-  allowedDevOrigins: [
-    'http://34.229.232.41:3000', // with port 3000
-    'http://34.229.232.41',      // without port
-    '34.229.232.41', 
-    '3.81.163.149',
-    'http://3.81.163.149',            // just IP
-  ],
+  // Allow all dev origins - NO MORE BLOCKING!
+  allowedDevOrigins: '*',
+  
+  // Additional headers for CORS
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-Requested-With,Content-Type,Authorization' },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
