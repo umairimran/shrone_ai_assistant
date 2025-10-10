@@ -16,6 +16,26 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# =====================================================
+# LOAD SINGLE POINT CONFIGURATION
+# =====================================================
+def load_config():
+    """Load configuration from config.json"""
+    try:
+        config_path = Path(__file__).parent / "config.json"
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Warning: Could not load config.json: {e}")
+        return {"current_ec2_ip": "localhost", "backend_port": "8000", "frontend_port": "3000"}
+
+CONFIG = load_config()
+CURRENT_IP = CONFIG.get("current_ec2_ip", "localhost")
+BACKEND_PORT = CONFIG.get("backend_port", "8000")
+FRONTEND_PORT = CONFIG.get("frontend_port", "3000")
+
+print(f"🌐 Loaded configuration: IP={CURRENT_IP}, Backend Port={BACKEND_PORT}, Frontend Port={FRONTEND_PORT}")
+
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -1117,26 +1137,25 @@ app = FastAPI(
 )
 
 # =====================================================
-# SINGLE POINT CORS CONFIGURATION
+# AUTOMATIC CORS CONFIGURATION FROM config.json
 # =====================================================
-# Add new IPs here when you change EC2 instances
+# Automatically generate CORS origins from config.json IP
 ALLOWED_CORS_ORIGINS = [
-    # Current EC2 instance (54.158.225.97)
-    "http://54.158.225.97:3000",
-    "https://54.158.225.97:3000",
-    "http://54.158.225.97:8000",
-    "http://ec2-54-158-225-97.compute-1.amazonaws.com:3000",
-    "https://ec2-54-158-225-97.compute-1.amazonaws.com:3000",
-    # Old EC2 instances (keeping for backward compatibility)
-    "http://34.229.232.41:3000",
-    "https://34.229.232.41:3000",
-    "http://3.81.163.149:3000",
-    "https://3.81.163.149:3000",
+    f"http://{CURRENT_IP}:{FRONTEND_PORT}",
+    f"https://{CURRENT_IP}:{FRONTEND_PORT}",
+    f"http://{CURRENT_IP}:{BACKEND_PORT}",
+    f"https://{CURRENT_IP}:{BACKEND_PORT}",
+    f"http://{CURRENT_IP}",
+    f"https://{CURRENT_IP}",
     # Localhost for development
     "http://localhost:3000", 
+    "http://localhost:8000",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:8000",
     "*"  # Allow all origins for maximum flexibility
 ]
+
+print(f"🔒 CORS configured for: {CURRENT_IP}")
 
 # Add CORS middleware
 app.add_middleware(

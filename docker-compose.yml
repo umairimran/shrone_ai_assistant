@@ -17,13 +17,15 @@ services:
     build:
       context: ./frontend_2
       dockerfile: Dockerfile
+      args:
+        - CURRENT_IP=54.158.225.97  # ← CHANGE IP HERE (or use config.json)
     container_name: shrone-frontend
     ports:
       - "3000:3000"
     environment:
       - NEXT_TELEMETRY_DISABLED=1
-      - BACKEND_URL=http://54.158.225.97:8000
-      - NEXT_PUBLIC_BACKEND_URL=http://54.158.225.97:8000
+      - BACKEND_URL=http://54.158.225.97:8000  # ← Auto-reads from config.json
+      - NEXT_PUBLIC_BACKEND_URL=http://54.158.225.97:8000  # ← Auto-reads from config.json
       - HOSTNAME=0.0.0.0
       - NODE_ENV=development
     depends_on:
