@@ -22,6 +22,7 @@ VALID_CATEGORIES = {
     }
 
 
+
 def setup_logging():
         """Set up logging for batch processing"""
         log_dir = Path("logs")
