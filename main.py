@@ -2069,14 +2069,19 @@ async def validate_json_file(
         )
 
 
-def extract_citations_for_all_categories(source_metadata_list: list) -> list:
+def extract_citations_for_all_categories(source_metadata_list: list, max_per_category: int = 3) -> list:
     """
-    Force citations for ALL documents when 'All Categories' is selected.
-    Guarantees quotes from every category searched.
-    """
-    cites = []
+    Generate citations from ALL categories with deduplication.
+    Ensures representation from every category, removes duplicates within each category.
     
-    # Group by category for logging
+    Args:
+        source_metadata_list: List of document metadata from retrieval
+        max_per_category: Maximum unique citations per category (default: 3)
+    
+    Returns:
+        List of unique citations with representation from all categories
+    """
+    # Group by category first
     by_category = {}
     for meta in source_metadata_list:
         cat = meta.get('category', 'Unknown')
@@ -2084,31 +2089,77 @@ def extract_citations_for_all_categories(source_metadata_list: list) -> list:
             by_category[cat] = []
         by_category[cat].append(meta)
     
-    print(f"📚 Generating citations for ALL documents from all categories:")
+    print(f"📚 Generating citations from ALL categories (max {max_per_category} per category):")
     for cat, docs in by_category.items():
-        print(f"   📁 {cat}: {len(docs)} citations")
+        print(f"   📁 {cat}: {len(docs)} documents")
     
-    # Generate citation for every document
-    for i, meta in enumerate(source_metadata_list):
-        citation = {
-            "id": f"citation-{i+1}",
-            "doc_title": meta.get('title', 'Unknown Document'),
-            "title": meta.get('title', 'Unknown Document'),
-            "category": meta.get('category', 'Unknown Category'),
-            "section": meta.get('section', 'Unknown Section'),
-            "date": meta.get('date', 'Unknown Date'),
-            "quote": meta.get('content', ''),  # ← GUARANTEED QUOTE
-            "pages": f"{meta.get('page_start', '')}-{meta.get('page_end', '')}" if meta.get('page_start') and meta.get('page_end') else "",
-            "heading_path": meta.get('heading_path', ''),
-            "hierarchy_path": meta.get('heading_path', ''),
-            "year": meta.get('year', ''),
-            "document_number": meta.get('document_number', ''),
-            "confidence_score": 0.95
-        }
-        cites.append(citation)
+    all_citations = []
+    total_duplicates = 0
     
-    print(f"✅ Generated {len(cites)} citations with quotes from {len(by_category)} categories")
-    return cites
+    # Process each category separately to ensure all categories are represented
+    for category_name, category_docs in by_category.items():
+        seen_in_category = set()  # Track duplicates within THIS category only
+        category_citations = []
+        duplicates_in_cat = 0
+        
+        print(f"\n🔍 Processing {category_name}:")
+        
+        for meta in category_docs:
+            # Stop if we have enough citations from this category
+            if len(category_citations) >= max_per_category:
+                print(f"   ✂️ Reached max citations for {category_name} ({max_per_category})")
+                break
+            
+            title = meta.get('title', 'Unknown Document')
+            section = meta.get('heading_path', '')  # Use heading as section identifier
+            
+            # Create unique key within this category
+            doc_key = (title.strip(), section.strip())
+            
+            # Skip duplicates within this category
+            if doc_key in seen_in_category:
+                duplicates_in_cat += 1
+                print(f"   ⏭️  Skipping duplicate: {title}")
+                continue
+                
+            seen_in_category.add(doc_key)
+            
+            citation = {
+                "id": f"citation-{len(all_citations)+1}",
+                "doc_title": title,
+                "title": title,
+                "category": category_name,
+                "section": section or meta.get('section', 'Unknown Section'),
+                "date": meta.get('issued_date', meta.get('date', 'Unknown Date')),
+                "quote": meta.get('content', ''),  # Guaranteed quote
+                "pages": f"{meta.get('page_start', '')}-{meta.get('page_end', '')}" if meta.get('page_start') and meta.get('page_end') else "",
+                "heading_path": meta.get('heading_path', ''),
+                "hierarchy_path": meta.get('heading_path', ''),
+                "year": meta.get('year', ''),
+                "document_number": meta.get('document_number', ''),
+                "confidence_score": 0.95
+            }
+            category_citations.append(citation)
+            print(f"   ✅ Added: {title}")
+        
+        all_citations.extend(category_citations)
+        total_duplicates += duplicates_in_cat
+        print(f"   📊 {category_name}: {len(category_citations)} unique citations, {duplicates_in_cat} duplicates removed")
+    
+    print(f"\n✅ Generated {len(all_citations)} UNIQUE citations from {len(by_category)} categories")
+    print(f"   📉 Total duplicates removed: {total_duplicates}")
+    print(f"   📊 Final breakdown:")
+    
+    # Show final breakdown by category
+    citation_by_cat = {}
+    for cite in all_citations:
+        cat = cite.get('category', 'Unknown')
+        citation_by_cat[cat] = citation_by_cat.get(cat, 0) + 1
+    
+    for cat, count in sorted(citation_by_cat.items()):
+        print(f"      • {cat}: {count} citation(s)")
+    
+    return all_citations
 
 def extract_citations_with_openai(llm_response: str, source_metadata_list: list) -> list:
     """
