@@ -152,20 +152,22 @@ export function ConfirmDialog({
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 sm:gap-3 mt-4 sm:mt-6">
-            <button
-              ref={cancelButtonRef}
-              type="button"
-              onClick={onClose}
-              className={cn(
-                'px-3 py-2 sm:px-4 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-colors',
-                'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100',
-                'hover:bg-gray-200 dark:hover:bg-gray-600',
-                'focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800'
-              )}
-              aria-label={`${cancelText} and close dialog`}
-            >
-              {cancelText}
-            </button>
+            {cancelText && (
+              <button
+                ref={cancelButtonRef}
+                type="button"
+                onClick={onClose}
+                className={cn(
+                  'px-3 py-2 sm:px-4 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-colors',
+                  'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100',
+                  'hover:bg-gray-200 dark:hover:bg-gray-600',
+                  'focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800'
+                )}
+                aria-label={`${cancelText} and close dialog`}
+              >
+                {cancelText}
+              </button>
+            )}
             <button
               type="button"
               onClick={onConfirm}
