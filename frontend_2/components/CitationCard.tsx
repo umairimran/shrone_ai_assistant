@@ -165,8 +165,8 @@ export function CitationCard({
             </span>
           )}
           
-          {/* Legacy pages support */}
-          {citation.pages && (
+          {/* Legacy pages support - only show if pages exist and are not empty */}
+          {citation.pages && citation.pages.trim() !== '' && citation.pages !== '-' && (
             <Tooltip
               content={`Referenced on page(s): ${citation.pages}`}
               position="top"
@@ -239,7 +239,7 @@ function extractPageInfo(citation: Citation): { pageLabel: string; pageStart: nu
     };
   }
   
-  if (citation.pages) {
+  if (citation.pages && citation.pages.trim() !== '' && citation.pages !== '-') {
     const pages = citation.pages.toLowerCase().replace(/^p\.?\s*/, '');
     // Handle ranges like "1-9" or "1–9"
     const rangeMatch = pages.match(/^(\d+)[-–](\d+)$/);
@@ -272,8 +272,9 @@ function extractPageInfo(citation: Citation): { pageLabel: string; pageStart: nu
     };
   }
   
+  // Return empty label instead of 'p. ?' for citations without pages
   return {
-    pageLabel: 'p. ?',
+    pageLabel: '',
     pageStart: 999999,
     pageEnd: 999999
   };
@@ -405,12 +406,14 @@ function GroupedCitationCard({
               key={pageIndex} 
               className="ml-4 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-2 bg-gray-50/50 dark:bg-gray-700/30 rounded-r-md"
             >
-              {/* Page Label */}
-              <div className="mb-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-xs font-semibold text-blue-700 dark:text-blue-300">
-                  {pageRef.pageLabel}
-                </span>
-              </div>
+              {/* Page Label - only show if not empty */}
+              {pageRef.pageLabel && pageRef.pageLabel.trim() !== '' && pageRef.pageLabel !== 'p. ?' && (
+                <div className="mb-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                    {pageRef.pageLabel}
+                  </span>
+                </div>
+              )}
               
               {/* Quote */}
               {pageRef.quote && (

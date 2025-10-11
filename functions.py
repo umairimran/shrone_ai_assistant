@@ -812,40 +812,28 @@ if QA_AVAILABLE and os.getenv("OPENAI_API_KEY"):
     EMB = OpenAIEmbeddings(model="text-embedding-3-small")
     LLM = ChatOpenAI(model=ANSWER_MODEL, temperature=0)
     
-    SYSTEM = """You are Sharon, a helpful document analysis assistant for an emergency medicine organization. Your role is to understand user intent and provide helpful information from organizational documents.
+    SYSTEM = """You are Sharon, a document analysis assistant for an emergency medicine organization.
 
-Core Principles:
-- Interpret ALL user inputs as questions or requests for information, even if informal or incomplete
-- Never require specific prefixes like "Give me the answer" - respond helpfully to any query
-- Understand the user's intent even with casual language like "workplace violence policy" or "council resolutions from 2025"
-- Always prioritize information from the provided documents
-- Be conversational and natural while staying focused on the documents
+Your primary role:
+- Answer questions using ONLY the provided document context
+- Extract specific information, numbers, dates, and details directly from the documents
+- Include ALL relevant details from the documents without skipping information
+- Be thorough and comprehensive in extracting information
 
-Response Approach:
-- Answer questions directly using document context
-- Maintain conversation flow and understand references to previous responses  
-- Handle follow-up questions naturally (like "summarize them", "explain it", "tell me more")
-- If specific information isn't in the documents, acknowledge this but provide what you can
-- For ambiguous queries, provide comprehensive information from relevant documents
-
-Document Focus:
-- Use the provided document context as your primary information source
-- When users ask about policies, procedures, resolutions, etc., search the documents thoroughly
-- Provide detailed, helpful responses with specific information from the documents
-- Include relevant details, dates, and context when available
-
-Formatting Requirements:
-- Format your response using Markdown syntax for better readability
-- Use headers (##, ###) to organize information clearly
-- Use bullet points (-) and numbered lists (1.) for structured information
-- Use **bold** for emphasis on key terms and concepts
+Formatting:
+- Format your response using Markdown syntax
+- Use headers (##, ###) to organize information
+- Use bullet points and numbered lists for clarity
+- Use **bold** for key terms
 - Use > blockquotes for important quotes or policy statements
-- Use `code` formatting for specific terms, numbers, or technical references
-- Structure your response with clear sections and subsections
-- Make the response visually appealing and easy to scan"""
+
+Context Understanding:
+- Understand user intent even with casual language
+- Handle follow-up questions naturally (like "summarize them", "explain it", "tell me more")
+- Use conversation history to understand references (like "them", "it", "those")"""
 
     HUMAN = """Category: {category}
-Current question: {question}
+Question: {question}
 
 {conversation_context}
 
@@ -855,19 +843,12 @@ Document Context:
 Source Documents Available:
 {source_metadata}
 
-Respond naturally and conversationally using Markdown formatting. Use the conversation history to understand what the user is referring to (like "them", "it", "those"). If they're asking for a summary, explanation, or follow-up about something from the conversation history, provide that based on both the history and any relevant document context.
-
-IMPORTANT: 
-- Format your response using Markdown syntax (headers, lists, bold, blockquotes, etc.)
-- Do NOT include any inline citations or parenthetical references in your answer text
-- Keep the answer clean and readable with proper Markdown structure
-
-CRITICAL RULES for Citations:
-1. Generate SEPARATE citations for EACH distinct source document
-2. Use the EXACT information from the Source Documents Available section above
-3. Do NOT combine multiple sources into one citation
-4. Each citation must be on its own numbered line
-5. Use the exact title, category, section, and date from the source metadata
+Instructions:
+- Answer the question using the document context above
+- Include specific details, numbers, dates, and quotes from the documents
+- Extract ALL relevant information without skipping details
+- Do NOT include any inline citations in your answer text
+- Format your response clearly with Markdown
 
 After your answer, provide citations in this exact format:
 
@@ -875,7 +856,11 @@ Citations:
 1. Title: [exact document title from source_metadata] | Category: [exact category from source_metadata] | Section: [exact section from source_metadata] | Date: [exact date from source_metadata] | Start Page: [exact start page from source_metadata] | End Page: [exact end page from source_metadata]
 2. Title: [exact document title from source_metadata] | Category: [exact category from source_metadata] | Section: [exact section from source_metadata] | Date: [exact date from source_metadata] | Start Page: [exact start page from source_metadata] | End Page: [exact end page from source_metadata]
 
-Generate one citation per distinct source document. Do NOT combine sources."""
+Citation Rules:
+- Generate SEPARATE citations for EACH distinct source document
+- Use EXACT information from the Source Documents Available section
+- Do NOT combine multiple sources into one citation
+- Each citation must be on its own numbered line"""
 
     PROMPT = ChatPromptTemplate.from_messages([
         ("system", SYSTEM),
@@ -1016,10 +1001,10 @@ def load_supabase_all_categories_retriever():
                 k = TOP_K
             
             all_docs = []
-            # Retrieve more docs per category to improve recall, then select best ones
-            docs_per_category = max(10, (k // len(self.category_tables)) * 2)  # 10 docs per category for better coverage
+            # Retrieve more docs per category based on pure relevance (not balanced)
+            docs_per_category = max(20, k * 2)  # Fetch more documents per category for better relevance
             
-            print(f"🚀 Searching all {len(self.category_tables)} categories with {docs_per_category} docs per category")
+            print(f"🚀 Searching all {len(self.category_tables)} categories with {docs_per_category} docs per category (relevance-based)")
             
             for category, table_name in self.category_tables.items():
                 try:
@@ -1035,7 +1020,7 @@ def load_supabase_all_categories_retriever():
                     # Call Supabase RPC function directly (same as single category)
                     result = self.client.rpc(search_function, {
                         "query_embedding": query_embedding,
-                        "match_threshold": 0.15,  # Lower threshold for better recall
+                        "match_threshold": 0.1,  # Lower threshold for better recall across all categories
                         "match_count": docs_per_category
                     }).execute()
                     
@@ -1057,54 +1042,59 @@ def load_supabase_all_categories_retriever():
                         )
                         category_docs.append(doc)
                         all_docs.append(doc)
-                        
-                        # DEBUG: Show details of each chunk retrieved
-                        doc_title = metadata.get('title', 'Unknown Title')
-                        doc_section = metadata.get('heading_path', 'Unknown Section')
-                        similarity = row.get('similarity', 0.0)
-                        content_preview = row.get('content', '')[:100] + '...' if len(row.get('content', '')) > 100 else row.get('content', '')
-                        
-                        print(f"   📄 Chunk {i+1}: {doc_title} | {doc_section} | Similarity: {similarity:.3f}")
-                        print(f"      Content: {content_preview}")
                     
-                    print(f"✅ Completed search for category: {category} ({len(result.data)} docs)")
+                    # Get unique document titles in this category
+                    unique_titles = set()
+                    for doc in category_docs:
+                        title = doc.metadata.get('title', 'Unknown Title')
+                        unique_titles.add(title)
+                    
+                    # Calculate average similarity for this category
+                    avg_similarity = sum(d.metadata.get('similarity', 0.0) for d in category_docs) / len(category_docs) if category_docs else 0.0
+                    
+                    print(f"✅ {category}: Retrieved {len(result.data)} chunks from {len(unique_titles)} unique documents | Avg Similarity: {avg_similarity:.3f}")
                     
                 except Exception as e:
                     print(f"❌ Error searching category {category}: {e}")
                     continue
             
-            # For All Categories, ensure equal representation from each category
-            # Distribute documents evenly across categories
-            print(f"🎯 All categories search completed: {len(all_docs)} total docs")
+            # Sort all documents by similarity score (pure relevance-based, no balanced distribution)
+            print(f"\n🎯 Total Retrieved: {len(all_docs)} chunks across all categories")
             
-            # Group documents by category to ensure balanced distribution
-            docs_by_category = {}
-            for doc in all_docs:
+            # Sort all documents by similarity score in descending order
+            all_docs_sorted = sorted(all_docs, key=lambda d: d.metadata.get('similarity', 0.0), reverse=True)
+            
+            # Return top k most relevant documents regardless of category
+            balanced_docs = all_docs_sorted[:k]
+            
+            # Calculate detailed statistics for final selection
+            category_stats = {}
+            for doc in balanced_docs:
                 cat = doc.metadata.get('category', 'Unknown')
-                if cat not in docs_by_category:
-                    docs_by_category[cat] = []
-                docs_by_category[cat].append(doc)
+                if cat not in category_stats:
+                    category_stats[cat] = {
+                        'count': 0,
+                        'titles': set(),
+                        'similarities': []
+                    }
+                category_stats[cat]['count'] += 1
+                category_stats[cat]['titles'].add(doc.metadata.get('title', 'Unknown'))
+                category_stats[cat]['similarities'].append(doc.metadata.get('similarity', 0.0))
             
-            # Calculate how many docs per category to include
-            docs_per_cat = max(1, k // len(docs_by_category))
-            balanced_docs = []
+            # Display detailed statistics
+            print(f"\n📊 Final Selection (Top {len(balanced_docs)} by relevance):")
+            for cat, stats in category_stats.items():
+                avg_sim = sum(stats['similarities']) / len(stats['similarities']) if stats['similarities'] else 0.0
+                max_sim = max(stats['similarities']) if stats['similarities'] else 0.0
+                min_sim = min(stats['similarities']) if stats['similarities'] else 0.0
+                print(f"   📁 {cat}:")
+                print(f"      • {stats['count']} chunks from {len(stats['titles'])} unique documents")
+                print(f"      • Similarity Range: {min_sim:.3f} - {max_sim:.3f} (Avg: {avg_sim:.3f})")
             
-            # Take equal number from each category
-            for cat, docs in docs_by_category.items():
-                selected_docs = docs[:docs_per_cat]
-                balanced_docs.extend(selected_docs)
-                print(f"   📄 Including {min(len(docs), docs_per_cat)} docs from {cat}")
-                
-                # DEBUG: Show which specific documents are selected for final results
-                for i, doc in enumerate(selected_docs):
-                    doc_title = doc.metadata.get('title', 'Unknown Title')
-                    similarity = doc.metadata.get('similarity', 0.0)
-                    print(f"      ✅ Selected: {doc_title} (Similarity: {similarity:.3f})")
+            print(f"\n✅ Returning {len(balanced_docs)} most relevant documents sorted by similarity")
             
-            print(f"🎯 Returning {len(balanced_docs)} balanced docs from {len(docs_by_category)} categories")
-            
-            # Return balanced selection
-            return balanced_docs[:k]
+            # Return top k most relevant documents
+            return balanced_docs
     
     return AllCategoriesRetriever(client, EMB, SUPABASE_TABLE_BY_CATEGORY)
 
@@ -1183,6 +1173,15 @@ def extract_citations_for_all_categories(source_metadata_list: list, max_per_cat
                 
             seen_in_category.add(doc_key)
             
+            # Format pages only if they exist
+            page_start = meta.get('page_start', '')
+            page_end = meta.get('page_end', '')
+            pages_str = ""
+            if page_start and page_end:
+                pages_str = f"{page_start}-{page_end}"
+            elif page_start:
+                pages_str = str(page_start)
+            
             citation = {
                 "id": f"citation-{len(all_citations)+1}",
                 "doc_title": title,
@@ -1191,7 +1190,7 @@ def extract_citations_for_all_categories(source_metadata_list: list, max_per_cat
                 "section": section or meta.get('section', 'Unknown Section'),
                 "date": meta.get('issued_date', meta.get('date', 'Unknown Date')),
                 "quote": meta.get('content', ''),  # Guaranteed quote
-                "pages": f"{meta.get('page_start', '')}-{meta.get('page_end', '')}" if meta.get('page_start') and meta.get('page_end') else "",
+                "pages": pages_str,
                 "heading_path": meta.get('heading_path', ''),
                 "hierarchy_path": meta.get('heading_path', ''),
                 "year": meta.get('year', ''),
@@ -1313,6 +1312,15 @@ Return ONLY the JSON array, no other text.
             else:
                 print(f"❌ DEBUG: No quote content found for '{title}'")
             
+            # Format pages only if they exist
+            start_page = citation_data.get('start_page', '')
+            end_page = citation_data.get('end_page', '')
+            pages_str = ""
+            if start_page and end_page:
+                pages_str = f"{start_page}-{end_page}"
+            elif start_page:
+                pages_str = str(start_page)
+            
             citation_entry = {
                 "id": f"citation-{len(cites) + 1}",
                 "doc_title": title,
@@ -1321,7 +1329,7 @@ Return ONLY the JSON array, no other text.
                 "section": citation_data.get("section", ""),
                 "date": citation_data.get("date", ""),
                 "quote": quote_content,
-                "pages": f"{citation_data.get('start_page', '')}-{citation_data.get('end_page', '')}" if citation_data.get('start_page') and citation_data.get('end_page') else "",
+                "pages": pages_str,
                 "heading_path": matching_meta['heading_path'] if matching_meta else "",
                 "hierarchy_path": matching_meta['heading_path'] if matching_meta else "",
                 "year": matching_meta['year'] if matching_meta else "",
@@ -1332,7 +1340,7 @@ Return ONLY the JSON array, no other text.
                     "section": citation_data.get("section", ""),
                     "date": citation_data.get("date", ""),
                     "year": matching_meta['year'] if matching_meta else "",
-                    "pages": f"{citation_data.get('start_page', '')}-{citation_data.get('end_page', '')}" if citation_data.get('start_page') and citation_data.get('end_page') else "",
+                    "pages": pages_str,
                     "heading_path": matching_meta['heading_path'] if matching_meta else ""
                 },
                 "meta": {
@@ -1410,6 +1418,15 @@ def extract_citations_for_all_categories(source_metadata_list: list, max_per_cat
                 
             seen_in_category.add(doc_key)
             
+            # Format pages only if they exist
+            page_start = meta.get('page_start', '')
+            page_end = meta.get('page_end', '')
+            pages_str = ""
+            if page_start and page_end:
+                pages_str = f"{page_start}-{page_end}"
+            elif page_start:
+                pages_str = str(page_start)
+            
             citation = {
                 "id": f"citation-{len(all_citations)+1}",
                 "doc_title": title,
@@ -1418,7 +1435,7 @@ def extract_citations_for_all_categories(source_metadata_list: list, max_per_cat
                 "section": section or meta.get('section', 'Unknown Section'),
                 "date": meta.get('issued_date', meta.get('date', 'Unknown Date')),
                 "quote": meta.get('content', ''),  # Guaranteed quote
-                "pages": f"{meta.get('page_start', '')}-{meta.get('page_end', '')}" if meta.get('page_start') and meta.get('page_end') else "",
+                "pages": pages_str,
                 "heading_path": meta.get('heading_path', ''),
                 "hierarchy_path": meta.get('heading_path', ''),
                 "year": meta.get('year', ''),
@@ -1540,6 +1557,15 @@ Return ONLY the JSON array, no other text.
             else:
                 print(f"❌ DEBUG: No quote content found for '{title}'")
             
+            # Format pages only if they exist
+            start_page = citation_data.get('start_page', '')
+            end_page = citation_data.get('end_page', '')
+            pages_str = ""
+            if start_page and end_page:
+                pages_str = f"{start_page}-{end_page}"
+            elif start_page:
+                pages_str = str(start_page)
+            
             citation_entry = {
                 "id": f"citation-{len(cites) + 1}",
                 "doc_title": title,
@@ -1548,7 +1574,7 @@ Return ONLY the JSON array, no other text.
                 "section": citation_data.get("section", ""),
                 "date": citation_data.get("date", ""),
                 "quote": quote_content,
-                "pages": f"{citation_data.get('start_page', '')}-{citation_data.get('end_page', '')}" if citation_data.get('start_page') and citation_data.get('end_page') else "",
+                "pages": pages_str,
                 "heading_path": matching_meta['heading_path'] if matching_meta else "",
                 "hierarchy_path": matching_meta['heading_path'] if matching_meta else "",
                 "year": matching_meta['year'] if matching_meta else "",
@@ -1559,7 +1585,7 @@ Return ONLY the JSON array, no other text.
                     "section": citation_data.get("section", ""),
                     "date": citation_data.get("date", ""),
                     "year": matching_meta['year'] if matching_meta else "",
-                    "pages": f"{citation_data.get('start_page', '')}-{citation_data.get('end_page', '')}" if citation_data.get('start_page') and citation_data.get('end_page') else "",
+                    "pages": pages_str,
                     "heading_path": matching_meta['heading_path'] if matching_meta else ""
                 },
                 "meta": {
