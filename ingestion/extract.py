@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 # Constants for OCR decision making
 MIN_MEANINGFUL_CHARS = 10  # Threshold for determining if page needs OCR
-DEFAULT_DPI = 300
+DEFAULT_DPI = 200  # Phase 2: Optimized DPI for quality vs memory balance
 DEFAULT_OCR_LANGUAGE = "eng"
 
 
@@ -77,17 +77,21 @@ def extract_text_from_file(file_path: Path) -> Tuple[str, List[str]]:
         raise ValueError(f"Unsupported file format: {suffix}")
 
 
-def extract_pdf(file_path: Path, ocr_language: str = DEFAULT_OCR_LANGUAGE, 
-                dpi: int = DEFAULT_DPI) -> Tuple[str, List[str]]:
+def extract_pdf(file_path: Path, *, enable_ocr: bool = False, 
+                ocr_language: str = DEFAULT_OCR_LANGUAGE, 
+                dpi: int = DEFAULT_DPI, 
+                ocr_threshold_chars: int = MIN_MEANINGFUL_CHARS) -> Tuple[str, List[str]]:
     """
-    Extract text from PDF files with selective OCR for mixed content.
+    Extract text from PDF files with optional OCR for mixed content.
     
-    Phase 1: Intelligent PDF processing - OCR only pages with insufficient text.
+    Phase 1: Hard stop OCR control - OCR only when explicitly enabled.
     
     Args:
         file_path: Path to PDF file
+        enable_ocr: Enable OCR processing (default: False - HARD STOP)
         ocr_language: Language for OCR (default: "eng")
-        dpi: DPI for OCR rendering (default: 300)
+        dpi: DPI for OCR rendering (default: 150)
+        ocr_threshold_chars: Minimum chars before considering OCR (default: 10)
         
     Returns:
         Tuple of (full_text, page_texts) where page_texts is list of page strings
@@ -99,18 +103,46 @@ def extract_pdf(file_path: Path, ocr_language: str = DEFAULT_OCR_LANGUAGE,
     if not pdfplumber and not fitz:
         raise ImportError("PDF extraction requires pdfplumber or pymupdf. Install with: pip install pdfplumber pymupdf")
     
-    logger.info(f"Extracting PDF: {file_path}")
+    logger.info(f"Extracting PDF: {file_path} (OCR enabled: {enable_ocr})")
+    needs_ocr = set()
     page_texts = []
     
     try:
-        # Primary extraction using pdfplumber
-        if pdfplumber:
-            page_texts = _extract_pdf_pdfplumber(file_path, ocr_language, dpi)
-        elif fitz:
-            page_texts = _extract_pdf_pymupdf(file_path, ocr_language, dpi)
+        # Phase 1: Extract text from all pages first
+        with pdfplumber.open(str(file_path)) as pdf:
+            for i, page in enumerate(pdf.pages):
+                try:
+                    # Extract text directly
+                    txt = (page.extract_text() or "").strip()
+                    page_texts.append(txt)
+                    
+                    # Only consider OCR if explicitly enabled
+                    if enable_ocr:
+                        meaningful_chars = sum(c.isalnum() for c in txt)
+                        if meaningful_chars < ocr_threshold_chars:
+                            needs_ocr.add(i)
+                            logger.debug(f"Page {i+1} marked for OCR ({meaningful_chars} chars)")
+                        else:
+                            logger.debug(f"Page {i+1} has sufficient text ({meaningful_chars} chars)")
+                    else:
+                        logger.debug(f"Page {i+1} processed without OCR (OCR disabled)")
+                        
+                except Exception as page_error:
+                    logger.warning(f"Error processing page {i+1}: {page_error}")
+                    page_texts.append("")  # Add empty page to maintain numbering
+        
+        # Phase 2: Apply OCR only if enabled and needed
+        if enable_ocr and needs_ocr:
+            logger.info(f"Applying OCR to {len(needs_ocr)} pages: {sorted(needs_ocr)}")
+            page_texts = _ocr_missing_pages(file_path, page_texts, needs_ocr, 
+                                          ocr_language=ocr_language, dpi=dpi)
+        elif needs_ocr:
+            logger.info(f"OCR disabled - skipping {len(needs_ocr)} pages that might need OCR")
+        else:
+            logger.info("No pages require OCR - all pages have sufficient text")
         
         # Join pages with double newlines
-        full_text = "\n\n".join(page_texts).strip()
+        full_text = "\n\n".join(t for t in page_texts if t).strip()
         
         logger.info(f"Extracted {len(page_texts)} pages from PDF, total length: {len(full_text)} chars")
         return full_text, page_texts
@@ -120,111 +152,190 @@ def extract_pdf(file_path: Path, ocr_language: str = DEFAULT_OCR_LANGUAGE,
         raise
 
 
-def _extract_pdf_pdfplumber(file_path: Path, ocr_language: str, dpi: int) -> List[str]:
-    """Extract PDF using pdfplumber with selective OCR."""
-    page_texts = []
+def _ocr_missing_pages(file_path: Path, page_texts: List[str], needs_ocr: set, 
+                      *, ocr_language: str = "eng", dpi: int = 200) -> List[str]:
+    """
+    Phase 2: Per-page OCR processing with immediate memory cleanup.
+    Processes one page at a time and frees memory immediately to keep RAM flat.
+    """
+    if not needs_ocr:
+        return page_texts
     
-    with pdfplumber.open(str(file_path)) as pdf:
-        for page_num, page in enumerate(pdf.pages, 1):
-            try:
-                # Try to extract text first
-                text = page.extract_text() or ""
-                text = text.replace("\r\n", "\n").strip()
-                
-                # Check if page needs OCR
-                meaningful_chars = len(re.sub(r'\s+', '', text))
-                
-                if meaningful_chars < MIN_MEANINGFUL_CHARS:
-                    logger.debug(f"Page {page_num} has {meaningful_chars} chars, applying OCR")
-                    ocr_text = _ocr_pdf_page_pdfplumber(page, ocr_language, dpi)
-                    if ocr_text and len(ocr_text.strip()) > meaningful_chars:
-                        text = ocr_text
-                        logger.debug(f"OCR improved page {page_num}: {len(ocr_text)} chars")
-                else:
-                    logger.debug(f"Page {page_num} has sufficient text ({meaningful_chars} chars), skipping OCR")
-                
-                page_texts.append(text)
-                
-            except Exception as e:
-                logger.warning(f"Error processing page {page_num}: {e}")
-                page_texts.append("")  # Add empty page to maintain page numbering
+    import io
+    import gc
     
-    return page_texts
-
-
-def _extract_pdf_pymupdf(file_path: Path, ocr_language: str, dpi: int) -> List[str]:
-    """Extract PDF using PyMuPDF with selective OCR."""
-    page_texts = []
-    
-    with fitz.open(str(file_path)) as pdf:
-        for page_num in range(pdf.page_count):
-            try:
-                page = pdf[page_num]
-                
-                # Extract text
-                text = page.get_text().replace("\r\n", "\n").strip()
-                
-                # Check if page needs OCR
-                meaningful_chars = len(re.sub(r'\s+', '', text))
-                
-                if meaningful_chars < MIN_MEANINGFUL_CHARS:
-                    logger.debug(f"Page {page_num + 1} has {meaningful_chars} chars, applying OCR")
-                    ocr_text = _ocr_pdf_page_pymupdf(page, ocr_language, dpi)
-                    if ocr_text and len(ocr_text.strip()) > meaningful_chars:
-                        text = ocr_text
-                        logger.debug(f"OCR improved page {page_num + 1}: {len(ocr_text)} chars")
-                else:
-                    logger.debug(f"Page {page_num + 1} has sufficient text ({meaningful_chars} chars), skipping OCR")
-                
-                page_texts.append(text)
-                
-            except Exception as e:
-                logger.warning(f"Error processing page {page_num + 1}: {e}")
-                page_texts.append("")  # Add empty page to maintain page numbering
-    
-    return page_texts
-
-
-def _ocr_pdf_page_pdfplumber(page, ocr_language: str, dpi: int) -> str:
-    """OCR a single PDF page using pdfplumber + pytesseract."""
-    if not pytesseract or not Image or not pdf2image:
-        logger.warning("OCR libraries not available (pytesseract, PIL, pdf2image)")
-        return ""
-    
-    try:
-        # Convert page to image
-        # Note: pdfplumber doesn't have direct image conversion, so we fall back to pdf2image
-        # This is a limitation - in production you might want to use pymupdf for this
-        logger.debug("OCR with pdfplumber requires pdf2image fallback")
-        return ""
+    if not fitz:
+        logger.warning("PyMuPDF not available for OCR - skipping OCR pages")
+        return page_texts
         
-    except Exception as e:
-        logger.warning(f"OCR failed for page: {e}")
-        return ""
-
-
-def _ocr_pdf_page_pymupdf(page, ocr_language: str, dpi: int) -> str:
-    """OCR a single PDF page using PyMuPDF + pytesseract."""
     if not pytesseract or not Image:
-        logger.warning("OCR libraries not available (pytesseract, PIL)")
-        return ""
+        logger.warning("OCR libraries not available (pytesseract, PIL) - skipping OCR pages")
+        return page_texts
     
+    logger.info(f"Starting per-page OCR for {len(needs_ocr)} pages at {dpi} DPI (Phase 2: Memory optimized)")
+    updated_page_texts = page_texts.copy()
+    
+    doc = fitz.open(str(file_path))
     try:
-        # Render page as image
-        mat = fitz.Matrix(dpi / 72, dpi / 72)  # Scale matrix for DPI
-        pix = page.get_pixmap(matrix=mat)
-        img_data = pix.tobytes("png")
+        mat = fitz.Matrix(dpi/72, dpi/72)  # Scale matrix for DPI
         
-        # Convert to PIL Image
-        img = Image.open(io.BytesIO(img_data))
-        
-        # OCR the image
-        ocr_text = pytesseract.image_to_string(img, lang=ocr_language)
-        return ocr_text.replace("\r\n", "\n").strip()
-        
+        for i in sorted(needs_ocr):
+            if i >= len(doc):
+                logger.warning(f"Page index {i} out of range, skipping")
+                continue
+                
+            logger.debug(f"Processing page {i+1} with OCR...")
+            
+            # Load page and create pixmap
+            page = doc.load_page(i)
+            pix = page.get_pixmap(matrix=mat, alpha=False)  # No alpha channel to save memory
+            
+            try:
+                # Convert to image bytes
+                img_bytes = pix.tobytes("png")
+                
+                # Process with PIL and OCR
+                with Image.open(io.BytesIO(img_bytes)) as im:
+                    im.load()  # Load image data into memory
+                    text = pytesseract.image_to_string(im, lang=ocr_language)
+                    
+            finally:
+                # Immediate cleanup of pixmap
+                del pix
+            
+            # Update page text if OCR produced better results
+            ocr_text = (text or "").strip()
+            if ocr_text and len(ocr_text) > len(updated_page_texts[i]):
+                updated_page_texts[i] = ocr_text
+                logger.debug(f"OCR improved page {i+1}: {len(ocr_text)} chars")
+            else:
+                logger.debug(f"OCR for page {i+1} didn't improve text quality")
+            
+            # Explicit cleanup and garbage collection
+            del img_bytes, text, ocr_text
+            gc.collect()  # Force garbage collection after each page
+            
     except Exception as e:
-        logger.warning(f"OCR failed for page: {e}")
-        return ""
+        logger.error(f"OCR processing failed: {e}")
+        # Return original page texts if OCR fails
+        return page_texts
+    finally:
+        # Always close the document
+        doc.close()
+    
+    logger.info(f"Completed OCR processing for {len(needs_ocr)} pages")
+    return updated_page_texts
+
+
+# Removed old OCR functions - now using unified approach in extract_pdf
+
+
+# Phase 3: Streaming pipeline functions for memory optimization
+
+def iter_clean_pages(pages_iter):
+    """
+    Phase 3: Page-by-page cleaning generator to avoid large aggregates.
+    Processes pages one at a time without holding all pages in memory.
+    """
+    from ingestion.clean import clean_page_text
+    
+    for page in pages_iter:
+        if not page or not page.strip():
+            continue
+        try:
+            cleaned = clean_page_text(page)
+            if cleaned and cleaned.strip():
+                yield cleaned
+        except Exception as e:
+            logger.warning(f"Error cleaning page: {e}")
+            # Yield original page if cleaning fails
+            if page and page.strip():
+                yield page
+
+
+def iter_chunks(pages_iter, target_tokens: int = 1000, overlap: int = 200, 
+                tokenize=None):
+    """
+    Phase 3: Generator-based chunking to avoid large memory aggregates.
+    Processes pages into chunks without holding all text in memory.
+    
+    Args:
+        pages_iter: Iterator of cleaned page texts
+        target_tokens: Target tokens per chunk (default: 1000)
+        overlap: Overlap tokens between chunks (default: 200)
+        tokenize: Tokenization function (default: simple split)
+    
+    Yields:
+        Text chunks as strings
+    """
+    if tokenize is None:
+        tokenize = lambda s: s.split()
+    
+    buf = []
+    
+    for page in pages_iter:
+        if not page or not page.strip():
+            continue
+            
+        try:
+            toks = tokenize(page)
+            j = 0
+            
+            while j < len(toks):
+                space = target_tokens - len(buf)
+                if space <= 0:
+                    # Buffer is full, yield chunk and reset with overlap
+                    if buf:
+                        yield " ".join(buf)
+                        buf = buf[-overlap:] if len(buf) > overlap else []
+                    space = target_tokens - len(buf)
+                
+                take = min(space, len(toks) - j)
+                buf.extend(toks[j:j+take])
+                j += take
+                
+                if len(buf) >= target_tokens:
+                    yield " ".join(buf)
+                    buf = buf[-overlap:] if len(buf) > overlap else []
+                    
+        except Exception as e:
+            logger.warning(f"Error tokenizing page: {e}")
+            continue
+    
+    # Yield final chunk if buffer has content
+    if buf:
+        yield " ".join(buf)
+
+
+def process_pages_streaming(page_texts, target_tokens: int = 1000, 
+                          overlap: int = 200, batch_size: int = 12):
+    """
+    Phase 3: Complete streaming pipeline for page processing.
+    Combines cleaning, chunking, and batching without large aggregates.
+    
+    Args:
+        page_texts: List or iterator of raw page texts
+        target_tokens: Target tokens per chunk
+        overlap: Overlap tokens between chunks
+        batch_size: Batch size for processing
+    
+    Yields:
+        Batches of processed chunks
+    """
+    # Create streaming pipeline
+    pages_iter = iter_clean_pages(iter(page_texts))
+    chunks_iter = iter_chunks(pages_iter, target_tokens, overlap)
+    
+    batch = []
+    for chunk in chunks_iter:
+        batch.append(chunk)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+    
+    # Yield final batch if it has content
+    if batch:
+        yield batch
 
 
 def extract_docx(file_path: Path) -> Tuple[str, List[str]]:
