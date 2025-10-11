@@ -24,8 +24,8 @@ services:
       - "3000:3000"
     environment:
       - NEXT_TELEMETRY_DISABLED=1
-      - BACKEND_URL=http://34.229.223.135:8000  # ← Updated to match config.json
-      - NEXT_PUBLIC_BACKEND_URL=http://34.229.223.135:8000  # ← Updated to match config.json
+      - BACKEND_URL=http://54.91.145.89:8000  # ← Updated to match config.json
+      - NEXT_PUBLIC_BACKEND_URL=http://54.91.145.89:8000  # ← Updated to match config.json
       - HOSTNAME=0.0.0.0
       - NODE_ENV=development
     depends_on:
