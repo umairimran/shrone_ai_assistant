@@ -1166,6 +1166,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include management router
+from management.api_routes import router as management_router
+app.include_router(management_router)
+
 # Custom exception handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -2791,11 +2795,12 @@ async def get_filenames_by_category(category: str):
 
 
 if __name__ == "__main__":
-    # Development server
+    # Production server with multiple workers for concurrent processing
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,
+        workers=4,  # 🚀 Enable 4 concurrent workers for multiple users
+        reload=False,  # Disable reload in production for stability
         log_level="info"
     )

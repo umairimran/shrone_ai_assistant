@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { DocumentNode } from './DocumentNode';
 import { YearFolder } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface YearNodeProps {
   categoryId: string;
@@ -30,6 +31,11 @@ export function YearNode({
   onDeleteYearFolder,
   onUploadNewVersion
 }: YearNodeProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [warningMessage, setWarningMessage] = useState('');
+  
   const handleYearToggle = () => {
     onToggleYear(categoryId, yearFolder.year);
   };
@@ -41,9 +47,26 @@ export function YearNode({
 
   const handleDeleteFolder = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (yearFolder.documentCount === 0 && onDeleteYearFolder) {
+    
+    // Check if year folder has documents
+    const hasDocuments = yearFolder.documentCount > 0;
+    
+    if (hasDocuments) {
+      // Year folder is not empty - show warning
+      const message = `This folder cannot be deleted because it contains ${yearFolder.documentCount} document(s).`;
+      setWarningMessage(message);
+      setShowDeleteWarning(true);
+    } else {
+      // Year folder is empty - show confirmation
+      setShowDeleteConfirm(true);
+    }
+  };
+
+  const confirmDeleteFolder = () => {
+    if (onDeleteYearFolder) {
       onDeleteYearFolder(categoryId, yearFolder.year);
     }
+    setShowDeleteConfirm(false);
   };
 
   return (
@@ -51,8 +74,10 @@ export function YearNode({
       {/* Year Header */}
       <div
         onClick={handleYearToggle}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          'flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-3 rounded-md cursor-pointer transition-colors overflow-hidden',
+          'flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-3 rounded-md cursor-pointer transition-colors overflow-hidden group',
           'hover:bg-gray-100 dark:hover:bg-gray-800',
           isExpanded && 'bg-gray-50 dark:bg-gray-800/50'
         )}
@@ -92,30 +117,42 @@ export function YearNode({
         </div>
 
         {/* Action Buttons */}
-        {isExpanded && (
-          <div className="flex items-center gap-1">
-            {/* Upload Document Button */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Upload Document Button */}
+          {isExpanded && (
             <button
               onClick={handleUploadDocument}
-              className="flex-shrink-0 px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
+              className="px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
               title="Upload document to this year"
             >
               <span className="hidden sm:inline">+ Upload Document</span>
               <span className="sm:hidden">+ Upload</span>
             </button>
-            
-            {/* Delete Empty Folder Button */}
-            {yearFolder.documentCount === 0 && onDeleteYearFolder && (
-              <button
-                onClick={handleDeleteFolder}
-                className="flex-shrink-0 px-2 py-1 text-[10px] sm:text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors whitespace-nowrap"
-                title="Delete empty year folder"
+          )}
+          
+          {/* Delete Year Folder Button - shows on hover */}
+          {onDeleteYearFolder && (isHovered || isExpanded) && (
+            <button
+              onClick={handleDeleteFolder}
+              className="px-2 py-1 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
+              title={`Delete year folder "${yearFolder.year}"`}
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                🗑️
-              </button>
-            )}
-          </div>
-        )}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Documents */}
@@ -150,6 +187,30 @@ export function YearNode({
           )}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog (Empty Year Folder) */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={confirmDeleteFolder}
+        title="Delete Year Folder"
+        message={`Are you sure you want to delete the year folder "${yearFolder.year}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Delete Warning Dialog (Non-empty Year Folder) */}
+      <ConfirmDialog
+        isOpen={showDeleteWarning}
+        onClose={() => setShowDeleteWarning(false)}
+        onConfirm={() => setShowDeleteWarning(false)}
+        title="Cannot Delete"
+        message={warningMessage}
+        confirmText="OK"
+        cancelText=""
+        variant="warning"
+      />
     </div>
   );
 }

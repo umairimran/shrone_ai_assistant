@@ -27,7 +27,11 @@ export function HierarchicalTree({
     getDocumentsByCategory, 
     addCategory,
     addYearFolder,
-    removeYearFolder
+    removeYearFolder,
+    deleteCategory,
+    syncYearFolders,
+    getSyncedYearFolders,
+    syncAllYearFolders
   } = useManagement();
 
   const [expandedState, setExpandedState] = useState<TreeExpandedState>({});
@@ -124,8 +128,39 @@ export function HierarchicalTree({
     removeYearFolder(categoryId, year);
   }, [removeYearFolder]);
 
+  const handleDeleteCategory = useCallback((categoryId: string) => {
+    console.log('🗑️ Deleting category:', categoryId);
+    deleteCategory(categoryId);
+  }, [deleteCategory]);
+
+  const handleSyncYearFolders = useCallback(async (categoryId: string) => {
+    console.log('🔄 Syncing year folders for category:', categoryId);
+    try {
+      const syncedYears = await syncYearFolders(categoryId);
+      console.log('✅ Synced years:', syncedYears);
+    } catch (error) {
+      console.error('❌ Error syncing year folders:', error);
+    }
+  }, [syncYearFolders]);
+
   return (
     <div className={cn('space-y-2', className)}>
+      {/* Sync Button */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={async () => {
+            // Sync all categories at once
+            await syncAllYearFolders();
+          }}
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Sync Year Folders
+        </button>
+      </div>
+      
       {/* Tree Nodes */}
       <div className="space-y-1">
         {treeNodes.map(node => (
@@ -142,6 +177,7 @@ export function HierarchicalTree({
             onDocumentDelete={onDocumentDelete}
             onDeleteYearFolder={handleDeleteYearFolder}
             onUploadNewVersion={onUploadNewVersion}
+            onDeleteCategory={handleDeleteCategory}
           />
         ))}
       </div>

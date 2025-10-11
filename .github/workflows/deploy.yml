@@ -3,7 +3,7 @@ name: Deploy Shrone_Agent to EC2
 on:
   push:
     branches:
-      - main  # change if you use 'master' or 'dev'
+      - shahzad  # change if you use 'master' or 'dev'
 
 jobs:
   deploy:
@@ -24,7 +24,7 @@ jobs:
             cd /home/ubuntu/Shrone_Agent
             # ⚡ Reset any local changes and clean untracked files
             git fetch origin
-            git reset --hard origin/main
+            git reset --hard origin/shahzad
             git clean -fd
             # Rebuild and restart Docker containers
             docker-compose down

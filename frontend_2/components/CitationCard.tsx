@@ -23,6 +23,26 @@ function getCitationDate(citation: Citation): string | undefined {
   return citation.document?.date || citation.date;
 }
 
+function getCitationYear(citation: Citation): string | undefined {
+  // First try to get year directly from metadata
+  const directYear = citation.document?.year || citation.year;
+  if (directYear) {
+    return directYear;
+  }
+  
+  // Fallback: extract year from date if available
+  const date = getCitationDate(citation);
+  if (date) {
+    try {
+      return new Date(date).getFullYear().toString();
+    } catch {
+      return undefined;
+    }
+  }
+  
+  return undefined;
+}
+
 // Format date for display
 function formatDisplayDate(dateString: string): string {
   try {
@@ -138,10 +158,10 @@ export function CitationCard({
             </span>
           )}
           
-          {/* Date */}
-          {getCitationDate(citation) && (
+          {/* Year */}
+          {getCitationYear(citation) && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-900/30 text-xs font-medium text-purple-700 dark:text-purple-300">
-              {formatDisplayDate(getCitationDate(citation)!)}
+              {getCitationYear(citation)}
             </span>
           )}
           
@@ -191,6 +211,223 @@ export function CitationCard({
   );
 }
 
+// Enhanced grouping interface for document-level citations with page-level sub-blocks
+interface PageReference {
+  pageLabel: string;
+  quote: string;
+  originalIndex: number;
+  pageStart: number;
+  pageEnd: number;
+}
+
+interface GroupedCitation {
+  title: string;
+  category?: string;
+  date?: string;
+  pageReferences: PageReference[];
+  originalIndices: number[];
+  firstCitationIndex: number; // For maintaining original order
+}
+
+// Helper function to extract page information and create a sortable page label
+function extractPageInfo(citation: Citation): { pageLabel: string; pageStart: number; pageEnd: number } {
+  if (citation.page_span) {
+    return {
+      pageLabel: `p. ${citation.page_span.start}–${citation.page_span.end}`,
+      pageStart: citation.page_span.start,
+      pageEnd: citation.page_span.end
+    };
+  }
+  
+  if (citation.pages) {
+    const pages = citation.pages.toLowerCase().replace(/^p\.?\s*/, '');
+    // Handle ranges like "1-9" or "1–9"
+    const rangeMatch = pages.match(/^(\d+)[-–](\d+)$/);
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1]);
+      const end = parseInt(rangeMatch[2]);
+      return {
+        pageLabel: `p. ${start}–${end}`,
+        pageStart: start,
+        pageEnd: end
+      };
+    }
+    
+    // Handle single page like "5" or comma-separated like "1,3,5"
+    const singleMatch = pages.match(/^(\d+)$/);
+    if (singleMatch) {
+      const page = parseInt(singleMatch[1]);
+      return {
+        pageLabel: `p. ${page}`,
+        pageStart: page,
+        pageEnd: page
+      };
+    }
+    
+    // Fallback to original format
+    return {
+      pageLabel: citation.pages.toLowerCase().startsWith('p.') ? citation.pages : `p. ${citation.pages}`,
+      pageStart: 999999, // Sort unknown pages at the end
+      pageEnd: 999999
+    };
+  }
+  
+  return {
+    pageLabel: 'p. ?',
+    pageStart: 999999,
+    pageEnd: 999999
+  };
+}
+
+// Enhanced grouping function that groups by document title + category
+function groupCitations(citations: Citation[]): GroupedCitation[] {
+  const groups = new Map<string, GroupedCitation>();
+  
+  citations.forEach((citation, index) => {
+    const title = getCitationTitle(citation);
+    const category = getCitationCategory(citation);
+    const year = getCitationYear(citation);
+    
+    // Create a unique key for grouping by title and category (ignore minor title variations)
+    const key = `${title}|${category || ''}`;
+    
+    const pageInfo = extractPageInfo(citation);
+    const pageRef: PageReference = {
+      pageLabel: pageInfo.pageLabel,
+      quote: citation.quote || '',
+      originalIndex: index,
+      pageStart: pageInfo.pageStart,
+      pageEnd: pageInfo.pageEnd
+    };
+    
+    if (groups.has(key)) {
+      const group = groups.get(key)!;
+      
+      // Always add page references as separate blocks - don't merge them
+      // Each citation chunk should remain as its own sub-block
+      group.pageReferences.push(pageRef);
+      group.originalIndices.push(index);
+    } else {
+      groups.set(key, {
+        title,
+        category,
+        date: year, // Store year in date field for compatibility
+        pageReferences: [pageRef],
+        originalIndices: [index],
+        firstCitationIndex: index // Track original order
+      });
+    }
+  });
+  
+  // Sort page references within each group by page number
+  groups.forEach(group => {
+    group.pageReferences.sort((a, b) => {
+      if (a.pageStart !== b.pageStart) {
+        return a.pageStart - b.pageStart;
+      }
+      return a.pageEnd - b.pageEnd;
+    });
+  });
+  
+  // Convert to array and sort by original citation order
+  return Array.from(groups.values()).sort((a, b) => a.firstCitationIndex - b.firstCitationIndex);
+}
+
+// Grouped Citation Card Component
+interface GroupedCitationCardProps {
+  group: GroupedCitation;
+  startIndex: number;
+  isHighlighted?: boolean;
+  onViewDocument?: (_citation: Citation) => void;
+  className?: string;
+}
+
+function GroupedCitationCard({ 
+  group, 
+  startIndex, 
+  isHighlighted = false, 
+  onViewDocument: _onViewDocument, 
+  className 
+}: GroupedCitationCardProps) {
+  return (
+    <div
+      id={`citation-${startIndex + 1}`}
+      className={cn(
+        'group relative rounded-lg border p-3 sm:p-4 transition-all duration-200',
+        'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700',
+        'hover:border-blue-500 hover:shadow-sm',
+        isHighlighted && 'border-blue-500 shadow-sm',
+        className
+      )}
+    >
+      <div className="p-2 sm:p-4">
+        {/* Citation Header - Parent Document Block */}
+        <div className="flex items-start justify-between gap-2 sm:gap-4 mb-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span 
+              className={cn(
+                'flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
+                'bg-blue-500 text-white'
+              )}
+              aria-label={`Citation ${startIndex + 1}`}
+            >
+              {startIndex + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
+                {group.title}
+              </h4>
+            </div>
+          </div>
+        </div>
+
+        {/* Citation Metadata - Document Level */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {/* Category */}
+          {group.category && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-green-100 dark:bg-green-900/30 text-xs font-medium text-green-700 dark:text-green-300">
+              {group.category}
+            </span>
+          )}
+          
+          {/* Year */}
+          {group.date && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-900/30 text-xs font-medium text-purple-700 dark:text-purple-300">
+              {group.date}
+            </span>
+          )}
+        </div>
+
+        {/* Page-Level Sub-blocks */}
+        <div className="space-y-2">
+          {group.pageReferences.map((pageRef, pageIndex) => (
+            <div 
+              key={pageIndex} 
+              className="ml-4 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-2 bg-gray-50/50 dark:bg-gray-700/30 rounded-r-md"
+            >
+              {/* Page Label */}
+              <div className="mb-2">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                  {pageRef.pageLabel}
+                </span>
+              </div>
+              
+              {/* Quote */}
+              {pageRef.quote && (
+                <blockquote className="mt-1">
+                  <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed italic">
+                    "{pageRef.quote.length > 150 ? pageRef.quote.substring(0, 150) + '...' : pageRef.quote}"
+                  </p>
+                </blockquote>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Citations List Container
 interface CitationsListProps {
   citations: Citation[];
@@ -207,7 +444,7 @@ export function CitationsList({
   onViewDocument,
   highlightedIndex,
   className,
-  maxVisibleCitations = 2 // Show 2 citations by default
+  maxVisibleCitations = 2 // Show 2 citation groups by default
 }: CitationsListProps) {
   const [showAll, setShowAll] = React.useState(false);
   
@@ -226,32 +463,46 @@ export function CitationsList({
     );
   }
 
-  const hasMoreCitations = citations.length > maxVisibleCitations;
-  const visibleCitations = showAll ? citations : citations.slice(0, maxVisibleCitations);
-  const hiddenCount = citations.length - maxVisibleCitations;
+  // Group citations by title, category, and year
+  const groupedCitations = groupCitations(citations);
+  
+  const hasMoreCitations = groupedCitations.length > maxVisibleCitations;
+  const visibleGroups = showAll ? groupedCitations : groupedCitations.slice(0, maxVisibleCitations);
+  const hiddenCount = groupedCitations.length - maxVisibleCitations;
+
+  // Calculate citation numbering for groups
+  let citationCounter = 0;
 
   return (
     <div className={cn('mt-6', className)}>
       <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
-        Citations ({citations.length})
+        Citations ({citations.length} references, {groupedCitations.length} sources)
       </h4>
       <div className="space-y-3" id="citations-list">
-        {visibleCitations.map((citation, index) => (
-          <div
-            key={citation.id || index}
-            className={cn(
-              'transform transition-all duration-300 ease-in-out',
-              index >= maxVisibleCitations && !showAll ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
-            )}
-          >
-            <CitationCard
-              citation={citation}
-              index={index}
-              isHighlighted={highlightedIndex === index}
-              onViewDocument={onViewDocument}
-            />
-          </div>
-        ))}
+        {visibleGroups.map((group, groupIndex) => {
+          const startIndex = citationCounter;
+          citationCounter += 1; // Each group gets one citation number
+          
+          // Check if any citation in this group is highlighted
+          const isGroupHighlighted = group.originalIndices.some(originalIndex => highlightedIndex === originalIndex);
+          
+          return (
+            <div
+              key={`${group.title}-${group.category}-${group.date}`}
+              className={cn(
+                'transform transition-all duration-300 ease-in-out',
+                groupIndex >= maxVisibleCitations && !showAll ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+              )}
+            >
+              <GroupedCitationCard
+                group={group}
+                startIndex={startIndex}
+                isHighlighted={isGroupHighlighted}
+                onViewDocument={onViewDocument}
+              />
+            </div>
+          );
+        })}
         
         {/* Show More/Less Button */}
         {hasMoreCitations && (
@@ -268,7 +519,7 @@ export function CitationsList({
               )}
               aria-expanded={showAll}
               aria-controls="citations-list"
-              aria-label={showAll ? `Hide ${hiddenCount} citations` : `Show ${hiddenCount} more citations`}
+              aria-label={showAll ? `Hide ${hiddenCount} citation sources` : `Show ${hiddenCount} more citation sources`}
             >
               {showAll ? (
                 <>
@@ -279,7 +530,7 @@ export function CitationsList({
                 </>
               ) : (
                 <>
-                  <span>Show {hiddenCount} More Citation{hiddenCount > 1 ? 's' : ''}</span>
+                  <span>Show {hiddenCount} More Source{hiddenCount > 1 ? 's' : ''}</span>
                   <svg className="w-4 h-4 transform transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>

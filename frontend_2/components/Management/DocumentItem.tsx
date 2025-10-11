@@ -99,7 +99,7 @@ export function DocumentItem({ document, onDelete, onView, className }: Document
               )}
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="p-1.5 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors"
                 title="Delete document"
                 disabled={isDeleting}
               >
