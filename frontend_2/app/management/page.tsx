@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { HierarchicalTree } from '@/components/Management/HierarchicalTree';
 import { UploadDocumentModal } from '@/components/Management/UploadDocumentModal';
-import { CreateCategoryModal } from '@/components/Management/CreateCategoryModal';
+// import { CreateCategoryModal } from '@/components/Management/CreateCategoryModal';
 import { ManagementProvider, useManagement } from '@/context/ManagementContext';
 import DocumentCacheService from '@/services/DocumentCacheService';
 import { testBackendConnection, testDocumentsEndpoint } from '@/lib/testBackend';
@@ -20,12 +20,12 @@ function ManagementPageContent() {
     uploadDocument,
     deleteDocument,
     getDocumentsByCategory,
-    addCategory,
+    // addCategory,
     addYearFolder: _addYearFolder
   } = useManagement();
   
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false);
+  // const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false);
   const [uploadContext, setUploadContext] = useState<{categoryId: string, year?: string, existingTitle?: string, isNewVersion?: boolean} | null>(null);
   const [isClient, setIsClient] = useState(false);
 
@@ -95,22 +95,23 @@ function ManagementPageContent() {
     setUploadContext(null);
   };
 
-  const handleCreateCategory = async (data: {name: string, description?: string}) => {
-    try {
-      console.log('Creating new category:', data);
-      
-      // Add the category to the state immediately
-      addCategory(data.name, data.description);
-      
-      // Close the modal
-      setShowCreateCategoryModal(false);
-      
-      // Show success feedback
-      console.log('✅ Category created successfully:', data.name);
-    } catch (error) {
-      console.error('Error creating category:', error);
-    }
-  };
+  // COMMENTED OUT: Fixed categories only - no dynamic category creation
+  // const handleCreateCategory = async (data: {name: string, description?: string}) => {
+  //   try {
+  //     console.log('Creating new category:', data);
+  //     
+  //     // Add the category to the state immediately
+  //     addCategory(data.name, data.description);
+  //     
+  //     // Close the modal
+  //     setShowCreateCategoryModal(false);
+  //     
+  //     // Show success feedback
+  //     console.log('✅ Category created successfully:', data.name);
+  //   } catch (error) {
+  //     console.error('Error creating category:', error);
+  //   }
+  // };
 
   const handleDeleteDocument = async (documentId: string): Promise<boolean> => {
     try {
@@ -196,7 +197,8 @@ function ManagementPageContent() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <button
+            {/* COMMENTED OUT: Fixed categories only - no dynamic category creation */}
+            {/* <button
               onClick={() => setShowCreateCategoryModal(true)}
               className="inline-flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
@@ -205,7 +207,7 @@ function ManagementPageContent() {
               </svg>
               <span className="hidden sm:inline">Create New Category</span>
               <span className="sm:hidden">Create</span>
-            </button>
+            </button> */}
             <ThemeToggle />
           </div>
         </div>
@@ -252,14 +254,15 @@ function ManagementPageContent() {
         />
       )}
 
+      {/* COMMENTED OUT: Fixed categories only - no dynamic category creation */}
       {/* Create Category Modal */}
-      {showCreateCategoryModal && (
+      {/* {showCreateCategoryModal && (
         <CreateCategoryModal
           isOpen={showCreateCategoryModal}
           onClose={() => setShowCreateCategoryModal(false)}
           onCreate={handleCreateCategory}
         />
-      )}
+      )} */}
     </div>
   );
 }

@@ -25,10 +25,10 @@ export function HierarchicalTree({
   const { 
     categories, 
     getDocumentsByCategory, 
-    addCategory,
+    // addCategory,
     addYearFolder,
     removeYearFolder,
-    deleteCategory,
+    // deleteCategory,
     syncYearFolders,
     getSyncedYearFolders,
     syncAllYearFolders
@@ -128,10 +128,11 @@ export function HierarchicalTree({
     removeYearFolder(categoryId, year);
   }, [removeYearFolder]);
 
-  const handleDeleteCategory = useCallback((categoryId: string) => {
-    console.log('🗑️ Deleting category:', categoryId);
-    deleteCategory(categoryId);
-  }, [deleteCategory]);
+  // COMMENTED OUT: Fixed categories only - no category deletion allowed
+  // const handleDeleteCategory = useCallback((categoryId: string) => {
+  //   console.log('🗑️ Deleting category:', categoryId);
+  //   deleteCategory(categoryId);
+  // }, [deleteCategory]);
 
   const handleSyncYearFolders = useCallback(async (categoryId: string) => {
     console.log('🔄 Syncing year folders for category:', categoryId);
@@ -177,7 +178,7 @@ export function HierarchicalTree({
             onDocumentDelete={onDocumentDelete}
             onDeleteYearFolder={handleDeleteYearFolder}
             onUploadNewVersion={onUploadNewVersion}
-            onDeleteCategory={handleDeleteCategory}
+            // onDeleteCategory={handleDeleteCategory}
           />
         ))}
       </div>

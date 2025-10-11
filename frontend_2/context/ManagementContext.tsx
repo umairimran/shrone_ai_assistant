@@ -14,8 +14,8 @@ interface ManagementContextValue {
   getDocumentsByCategory: (categoryId: string) => UploadedDoc[];
   uploadDocument: (data: DocumentUploadData) => Promise<'ok' | 'invalid' | 'failed'>;
   deleteDocument: (documentTitle: string, category: string) => Promise<boolean>;
-  addCategory: (name: string, description?: string) => void;
-  deleteCategory: (categoryId: string) => Promise<boolean>;
+  // addCategory: (name: string, description?: string) => void;
+  // deleteCategory: (categoryId: string) => Promise<boolean>;
   addYearFolder: (categoryId: string, year: string) => void;
   removeYearFolder: (categoryId: string, year: string) => void;
   syncYearFolders: (categoryId: string) => Promise<string[]>;
@@ -269,54 +269,56 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     }
   }, [initializeCache]);
 
-  const addCategory = useCallback((name: string, description?: string) => {
-    const newCategory: DocumentCategory = {
-      id: `custom-${Date.now()}`, // Generate unique ID
-      name,
-      description,
-      documentCount: 0
-    };
-    
-    setCategories(prevCategories => {
-      // Check if category already exists
-      if (prevCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
-        console.warn('Category already exists:', name);
-        return prevCategories;
-      }
-      return [...prevCategories, newCategory];
-    });
-    
-    console.log('✅ Category added:', newCategory);
-  }, []);
+  // COMMENTED OUT: Fixed categories only - no dynamic category creation
+  // const addCategory = useCallback((name: string, description?: string) => {
+  //   const newCategory: DocumentCategory = {
+  //     id: `custom-${Date.now()}`, // Generate unique ID
+  //     name,
+  //     description,
+  //     documentCount: 0
+  //   };
+  //   
+  //   setCategories(prevCategories => {
+  //     // Check if category already exists
+  //     if (prevCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
+  //       console.warn('Category already exists:', name);
+  //       return prevCategories;
+  //     }
+  //     return [...prevCategories, newCategory];
+  //   });
+  //   
+  //   console.log('✅ Category added:', newCategory);
+  // }, []);
 
-  const deleteCategory = useCallback(async (categoryId: string): Promise<boolean> => {
-    try {
-      console.log('🗑️ Deleting category:', categoryId);
-      
-      // Find the category to get its name
-      const category = categories.find(cat => cat.id === categoryId);
-      if (!category) {
-        console.error('❌ Category not found:', categoryId);
-        return false;
-      }
+  // COMMENTED OUT: Fixed categories only - no category deletion allowed
+  // const deleteCategory = useCallback(async (categoryId: string): Promise<boolean> => {
+  //   try {
+  //     console.log('🗑️ Deleting category:', categoryId);
+  //     
+  //     // Find the category to get its name
+  //     const category = categories.find(cat => cat.id === categoryId);
+  //     if (!category) {
+  //       console.error('❌ Category not found:', categoryId);
+  //       return false;
+  //     }
 
-      // Check if category has documents (optional - warn user)
-      if (category.documentCount > 0) {
-        console.warn('⚠️ Category has documents, but proceeding with deletion');
-      }
+  //     // Check if category has documents (optional - warn user)
+  //     if (category.documentCount > 0) {
+  //       console.warn('⚠️ Category has documents, but proceeding with deletion');
+  //     }
 
-      // Remove from local state
-      setCategories(prevCategories => 
-        prevCategories.filter(cat => cat.id !== categoryId)
-      );
-      
-      console.log('✅ Category deleted successfully:', category.name);
-      return true;
-    } catch (error) {
-      console.error('❌ Error deleting category:', error);
-      return false;
-    }
-  }, [categories]);
+  //     // Remove from local state
+  //     setCategories(prevCategories => 
+  //       prevCategories.filter(cat => cat.id !== categoryId)
+  //     );
+  //     
+  //     console.log('✅ Category deleted successfully:', category.name);
+  //     return true;
+  //   } catch (error) {
+  //     console.error('❌ Error deleting category:', error);
+  //     return false;
+  //   }
+  // }, [categories]);
 
   const addYearFolder = useCallback((categoryId: string, year: string) => {
     console.log('📁 Creating year folder for category:', categoryId, 'year:', year);
@@ -549,8 +551,8 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     getDocumentsByCategory,
     uploadDocument,
     deleteDocument,
-    addCategory,
-    deleteCategory,
+    // addCategory,
+    // deleteCategory,
     addYearFolder,
     removeYearFolder,
     syncYearFolders,
