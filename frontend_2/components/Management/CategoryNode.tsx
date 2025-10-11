@@ -18,7 +18,7 @@ interface CategoryNodeProps {
   onDocumentDelete?: (documentId: string) => Promise<boolean>;
   onDeleteYearFolder?: (categoryId: string, year: string) => void;
   onUploadNewVersion?: (document: any) => void;
-  onDeleteCategory?: (categoryId: string) => void;
+  // onDeleteCategory?: (categoryId: string) => void;
 }
 
 export function CategoryNode({
@@ -32,14 +32,14 @@ export function CategoryNode({
   onDocumentSelect,
   onDocumentDelete,
   onDeleteYearFolder,
-  onUploadNewVersion,
-  onDeleteCategory
+  onUploadNewVersion
+  // onDeleteCategory
 }: CategoryNodeProps) {
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showDeleteWarning, setShowDeleteWarning] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  // const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+  // const [isDeleting, setIsDeleting] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [warningMessage, setWarningMessage] = useState('');
+  // const [warningMessage, setWarningMessage] = useState('');
 
   const handleCategoryToggle = () => {
     onToggleCategory(node.id);
@@ -50,45 +50,47 @@ export function CategoryNode({
     onNewYearFolder(node.id);
   };
 
-  const handleDeleteCategory = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    // Check if category is empty (no year folders and no documents)
-    const hasYearFolders = node.yearFolders && node.yearFolders.length > 0;
-    const hasDocuments = node.documentCount > 0;
-    
-    if (hasYearFolders || hasDocuments) {
-      // Category is not empty - show warning
-      let message = "This category cannot be deleted because it contains ";
-      if (hasYearFolders && hasDocuments) {
-        message += `${node.yearFolders.length} folder(s) and ${node.documentCount} document(s).`;
-      } else if (hasYearFolders) {
-        message += `${node.yearFolders.length} folder(s).`;
-      } else {
-        message += `${node.documentCount} document(s).`;
-      }
-      
-      setWarningMessage(message);
-      setShowDeleteWarning(true);
-    } else {
-      // Category is empty - show confirmation
-      setShowDeleteConfirm(true);
-    }
-  };
+  // COMMENTED OUT: Fixed categories only - no category deletion allowed
+  // const handleDeleteCategory = (e: React.MouseEvent) => {
+  //   e.stopPropagation();
+  //   
+  //   // Check if category is empty (no year folders and no documents)
+  //   const hasYearFolders = node.yearFolders && node.yearFolders.length > 0;
+  //   const hasDocuments = node.documentCount > 0;
+  //   
+  //   if (hasYearFolders || hasDocuments) {
+  //     // Category is not empty - show warning
+  //     let message = "This category cannot be deleted because it contains ";
+  //     if (hasYearFolders && hasDocuments) {
+  //       message += `${node.yearFolders.length} folder(s) and ${node.documentCount} document(s).`;
+  //     } else if (hasYearFolders) {
+  //       message += `${node.yearFolders.length} folder(s).`;
+  //     } else {
+  //       message += `${node.documentCount} document(s).`;
+  //     }
+  //     
+  //     setWarningMessage(message);
+  //     setShowDeleteWarning(true);
+  //   } else {
+  //     // Category is empty - show confirmation
+  //     setShowDeleteConfirm(true);
+  //   }
+  // };
 
-  const confirmDelete = async () => {
-    if (!onDeleteCategory) return;
-    
-    setIsDeleting(true);
-    try {
-      await onDeleteCategory(node.id);
-      setShowDeleteConfirm(false);
-    } catch (error) {
-      console.error('Failed to delete category:', error);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+  // COMMENTED OUT: Fixed categories only - no category deletion allowed
+  // const confirmDelete = async () => {
+  //   if (!onDeleteCategory) return;
+  //   
+  //   setIsDeleting(true);
+  //   try {
+  //     await onDeleteCategory(node.id);
+  //     setShowDeleteConfirm(false);
+  //   } catch (error) {
+  //     console.error('Failed to delete category:', error);
+  //   } finally {
+  //     setIsDeleting(false);
+  //   }
+  // };
 
   return (
     <div className="select-none">
@@ -153,26 +155,7 @@ export function CategoryNode({
             </button>
           )}
 
-          {/* Delete Category Button */}
-          {onDeleteCategory && (isHovered || showDeleteConfirm) && (
-            <button
-              onClick={handleDeleteCategory}
-              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-all duration-200"
-              title={`Delete category "${node.name}"`}
-              disabled={isDeleting}
-            >
-              {isDeleting ? (
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              )}
-            </button>
-          )}
+          {/* COMMENTED OUT: Fixed categories only - no category deletion allowed */}
         </div>
       </div>
 
@@ -205,30 +188,8 @@ export function CategoryNode({
         </div>
       )}
 
-      {/* Delete Confirmation Dialog (Empty Category) */}
-      <ConfirmDialog
-        isOpen={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={confirmDelete}
-        title="Delete Category"
-        message={`Are you sure you want to delete the category "${node.name}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        variant="danger"
-        isLoading={isDeleting}
-      />
-
-      {/* Delete Warning Dialog (Non-empty Category) */}
-      <ConfirmDialog
-        isOpen={showDeleteWarning}
-        onClose={() => setShowDeleteWarning(false)}
-        onConfirm={() => setShowDeleteWarning(false)}
-        title="Cannot Delete"
-        message={warningMessage}
-        confirmText="OK"
-        cancelText=""
-        variant="warning"
-      />
+      {/* COMMENTED OUT: Fixed categories only - no category deletion allowed */}
+      {/* Delete confirmation and warning dialogs removed */}
     </div>
   );
 }
