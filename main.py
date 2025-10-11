@@ -812,7 +812,7 @@ if QA_AVAILABLE and os.getenv("OPENAI_API_KEY"):
     EMB = OpenAIEmbeddings(model="text-embedding-3-small")
     LLM = ChatOpenAI(model=ANSWER_MODEL, temperature=0)
     
-    SYSTEM = """You are Sharon, a helpful document analysis assistant for an emergency medicine organization. Your role is to understand user intent and provide helpful information from organizational documents.
+    SYSTEM = """You are Sharon, a comprehensive document analysis assistant for an emergency medicine organization. Your role is to provide thorough, detailed information from organizational documents without missing any important details.
 
 Core Principles:
 - Interpret ALL user inputs as questions or requests for information, even if informal or incomplete
@@ -828,11 +828,16 @@ Response Approach:
 - If specific information isn't in the documents, acknowledge this but provide what you can
 - For ambiguous queries, provide comprehensive information from relevant documents
 
-Document Focus:
+Document Focus - COMPREHENSIVE DETAIL EXTRACTION:
 - Use the provided document context as your primary information source
 - When users ask about policies, procedures, resolutions, etc., search the documents thoroughly
 - Provide detailed, helpful responses with specific information from the documents
 - Include relevant details, dates, and context when available
+- **CRITICAL: Extract and include ALL relevant details from every chunk provided**
+- **CRITICAL: Do not skip or summarize important information - be comprehensive**
+- **CRITICAL: Include specific numbers, dates, names, procedures, and technical details**
+- **CRITICAL: Reference all relevant sections, subsections, and specific clauses**
+- **CRITICAL: Include complete policy statements, not just summaries**
 
 Formatting Requirements:
 - Format your response using Markdown syntax for better readability
@@ -842,7 +847,8 @@ Formatting Requirements:
 - Use > blockquotes for important quotes or policy statements
 - Use `code` formatting for specific terms, numbers, or technical references
 - Structure your response with clear sections and subsections
-- Make the response visually appealing and easy to scan"""
+- Make the response visually appealing and easy to scan
+- **Use detailed subheadings to organize comprehensive information**"""
 
     HUMAN = """Category: {category}
 Current question: {question}
@@ -855,12 +861,21 @@ Document Context:
 Source Documents Available:
 {source_metadata}
 
-Respond naturally and conversationally using Markdown formatting. Use the conversation history to understand what the user is referring to (like "them", "it", "those"). If they're asking for a summary, explanation, or follow-up about something from the conversation history, provide that based on both the history and any relevant document context.
+**COMPREHENSIVE RESPONSE REQUIREMENTS:**
+- Extract and include ALL relevant details from every document chunk provided
+- Do not skip, summarize, or omit important information
+- Include specific numbers, dates, names, procedures, and technical details
+- Reference all relevant sections, subsections, and specific clauses
+- Include complete policy statements, not just summaries
+- Organize information comprehensively with detailed subheadings
+- Use the conversation history to understand what the user is referring to (like "them", "it", "those")
+- If they're asking for a summary, explanation, or follow-up about something from the conversation history, provide that based on both the history and any relevant document context
 
 IMPORTANT: 
 - Format your response using Markdown syntax (headers, lists, bold, blockquotes, etc.)
 - Do NOT include any inline citations or parenthetical references in your answer text
 - Keep the answer clean and readable with proper Markdown structure
+- **Be thorough and comprehensive - include every relevant detail from the provided chunks**
 
 CRITICAL RULES for Citations:
 1. Generate SEPARATE citations for EACH distinct source document
@@ -1011,15 +1026,16 @@ def load_supabase_all_categories_retriever():
             }
         
         def get_relevant_documents(self, query: str, k: int = None):
-            """Search across all category tables using RPC functions and combine results"""
+            """Search across all category tables using RPC functions and combine results based on RELEVANCE"""
             if k is None:
                 k = TOP_K
             
             all_docs = []
             # Retrieve more docs per category to improve recall, then select best ones
-            docs_per_category = max(10, (k // len(self.category_tables)) * 2)  # 10 docs per category for better coverage
+            docs_per_category = max(20, k * 2)  # Get more docs per category for better selection
             
             print(f"🚀 Searching all {len(self.category_tables)} categories with {docs_per_category} docs per category")
+            print(f"🎯 Using RELEVANCE-BASED retrieval (not balanced distribution)")
             
             for category, table_name in self.category_tables.items():
                 try:
@@ -1032,10 +1048,10 @@ def load_supabase_all_categories_retriever():
                     # Generate embedding for the query
                     query_embedding = self.embeddings.embed_query(query)
                     
-                    # Call Supabase RPC function directly (same as single category)
+                    # Call Supabase RPC function with lower threshold for better recall
                     result = self.client.rpc(search_function, {
                         "query_embedding": query_embedding,
-                        "match_threshold": 0.15,  # Lower threshold for better recall
+                        "match_threshold": 0.1,  # Lower threshold for better recall (was 0.15)
                         "match_count": docs_per_category
                     }).execute()
                     
@@ -1057,54 +1073,47 @@ def load_supabase_all_categories_retriever():
                         )
                         category_docs.append(doc)
                         all_docs.append(doc)
-                        
-                        # DEBUG: Show details of each chunk retrieved
-                        doc_title = metadata.get('title', 'Unknown Title')
-                        doc_section = metadata.get('heading_path', 'Unknown Section')
-                        similarity = row.get('similarity', 0.0)
-                        content_preview = row.get('content', '')[:100] + '...' if len(row.get('content', '')) > 100 else row.get('content', '')
-                        
-                        print(f"   📄 Chunk {i+1}: {doc_title} | {doc_section} | Similarity: {similarity:.3f}")
-                        print(f"      Content: {content_preview}")
                     
-                    print(f"✅ Completed search for category: {category} ({len(result.data)} docs)")
+                    print(f"   📄 Found {len(category_docs)} docs from {category}")
                     
                 except Exception as e:
                     print(f"❌ Error searching category {category}: {e}")
                     continue
             
-            # For All Categories, ensure equal representation from each category
-            # Distribute documents evenly across categories
+            # Sort ALL documents by similarity score (highest first) - PURE RELEVANCE-BASED
+            all_docs.sort(key=lambda x: x.metadata.get('similarity', 0.0), reverse=True)
+            
             print(f"🎯 All categories search completed: {len(all_docs)} total docs")
+            print(f"📊 Returning top {min(k, len(all_docs))} most relevant docs by similarity score")
             
-            # Group documents by category to ensure balanced distribution
-            docs_by_category = {}
-            for doc in all_docs:
+            # Show top results for debugging
+            print(f"\n{'='*80}")
+            print(f"TOP {min(5, len(all_docs))} MOST RELEVANT DOCUMENTS:")
+            print(f"{'='*80}")
+            for i, doc in enumerate(all_docs[:min(5, len(all_docs))]):
+                doc_title = doc.metadata.get('title', 'Unknown Title')
+                similarity = doc.metadata.get('similarity', 0.0)
+                category = doc.metadata.get('category', 'Unknown')
+                section = doc.metadata.get('heading_path', 'N/A')
+                print(f"{i+1}. [{category}] {doc_title}")
+                print(f"   Section: {section}")
+                print(f"   Similarity: {similarity:.3f}")
+                print(f"   Preview: {doc.page_content[:100]}...")
+                print(f"{'-'*80}")
+            
+            # Group by category for statistics
+            category_counts = {}
+            for doc in all_docs[:k]:
                 cat = doc.metadata.get('category', 'Unknown')
-                if cat not in docs_by_category:
-                    docs_by_category[cat] = []
-                docs_by_category[cat].append(doc)
+                category_counts[cat] = category_counts.get(cat, 0) + 1
             
-            # Calculate how many docs per category to include
-            docs_per_cat = max(1, k // len(docs_by_category))
-            balanced_docs = []
+            print(f"\n📊 CATEGORY DISTRIBUTION IN TOP {k} RESULTS:")
+            for cat, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True):
+                print(f"   • {cat}: {count} documents")
+            print(f"{'='*80}\n")
             
-            # Take equal number from each category
-            for cat, docs in docs_by_category.items():
-                selected_docs = docs[:docs_per_cat]
-                balanced_docs.extend(selected_docs)
-                print(f"   📄 Including {min(len(docs), docs_per_cat)} docs from {cat}")
-                
-                # DEBUG: Show which specific documents are selected for final results
-                for i, doc in enumerate(selected_docs):
-                    doc_title = doc.metadata.get('title', 'Unknown Title')
-                    similarity = doc.metadata.get('similarity', 0.0)
-                    print(f"      ✅ Selected: {doc_title} (Similarity: {similarity:.3f})")
-            
-            print(f"🎯 Returning {len(balanced_docs)} balanced docs from {len(docs_by_category)} categories")
-            
-            # Return balanced selection
-            return balanced_docs[:k]
+            # Return top k most similar documents regardless of category
+            return all_docs[:k]
     
     return AllCategoriesRetriever(client, EMB, SUPABASE_TABLE_BY_CATEGORY)
 
@@ -1165,10 +1174,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
-
-# Include management router
-from management.api_routes import router as management_router
-app.include_router(management_router)
 
 # Custom exception handlers
 @app.exception_handler(RequestValidationError)
@@ -1348,8 +1353,14 @@ async def preprocess_document(
                 detail="issued_date must be in ISO format YYYY-MM-DD (e.g., '2025-10-03')."
             )
     
-    # No year validation needed - user selected year is always correct
-    # The year comes from the folder structure the user chose
+    # year must match issued_date.year when both provided
+    if year is not None and issued_date:
+        parsed_date = datetime.strptime(issued_date, "%Y-%m-%d").date()
+        if year != parsed_date.year:
+            raise HTTPException(
+                status_code=400,
+                detail="year must match issued_date.year"
+            )
     
     # Create temporary file
     temp_file = None
@@ -1516,9 +1527,8 @@ async def preprocess_document(
             raise HTTPException(status_code=500, detail=f"Date inference failed: {str(date_error)}")
         
         try:
-            # Use the year provided by user (from year folder selection) - no derivation needed
-            inferred_year = year  # Simple assignment - whatever year folder the user selected
-            print(f"✅ Year set from user selection: {inferred_year}")
+            inferred_year = year or derive_year(cleaned_text, inferred_issued_date)
+            print(f"✅ Year derivation completed: {inferred_year}")
         except Exception as year_error:
             print(f"❌ Year derivation error: {year_error}")
             raise HTTPException(status_code=500, detail=f"Year derivation failed: {str(year_error)}")
@@ -2068,17 +2078,16 @@ async def validate_json_file(
         )
 
 
-def extract_citations_for_all_categories(source_metadata_list: list, max_per_category: int = 3) -> list:
+def extract_citations_for_all_categories(source_metadata_list: list) -> list:
     """
-    Generate citations from ALL categories with deduplication.
-    Ensures representation from every category, removes duplicates within each category.
+    Generate citations from ALL categories - NO LIMITS.
+    Processes all documents from all categories without any restrictions.
     
     Args:
         source_metadata_list: List of document metadata from retrieval
-        max_per_category: Maximum unique citations per category (default: 3)
     
     Returns:
-        List of unique citations with representation from all categories
+        List of all citations from all categories
     """
     # Group by category first
     by_category = {}
@@ -2088,40 +2097,23 @@ def extract_citations_for_all_categories(source_metadata_list: list, max_per_cat
             by_category[cat] = []
         by_category[cat].append(meta)
     
-    print(f"📚 Generating citations from ALL categories (max {max_per_category} per category):")
+    print(f"📚 Generating citations from ALL categories (NO LIMITS):")
     for cat, docs in by_category.items():
         print(f"   📁 {cat}: {len(docs)} documents")
     
     all_citations = []
-    total_duplicates = 0
     
-    # Process each category separately to ensure all categories are represented
+    # Process each category separately - NO DEDUPLICATION
     for category_name, category_docs in by_category.items():
-        seen_in_category = set()  # Track duplicates within THIS category only
         category_citations = []
-        duplicates_in_cat = 0
         
         print(f"\n🔍 Processing {category_name}:")
         
         for meta in category_docs:
-            # Stop if we have enough citations from this category
-            if len(category_citations) >= max_per_category:
-                print(f"   ✂️ Reached max citations for {category_name} ({max_per_category})")
-                break
+            # Process ALL documents - NO LIMITS, NO DEDUPLICATION
             
             title = meta.get('title', 'Unknown Document')
             section = meta.get('heading_path', '')  # Use heading as section identifier
-            
-            # Create unique key within this category
-            doc_key = (title.strip(), section.strip())
-            
-            # Skip duplicates within this category
-            if doc_key in seen_in_category:
-                duplicates_in_cat += 1
-                print(f"   ⏭️  Skipping duplicate: {title}")
-                continue
-                
-            seen_in_category.add(doc_key)
             
             citation = {
                 "id": f"citation-{len(all_citations)+1}",
@@ -2142,11 +2134,9 @@ def extract_citations_for_all_categories(source_metadata_list: list, max_per_cat
             print(f"   ✅ Added: {title}")
         
         all_citations.extend(category_citations)
-        total_duplicates += duplicates_in_cat
-        print(f"   📊 {category_name}: {len(category_citations)} unique citations, {duplicates_in_cat} duplicates removed")
+        print(f"   📊 {category_name}: {len(category_citations)} citations")
     
-    print(f"\n✅ Generated {len(all_citations)} UNIQUE citations from {len(by_category)} categories")
-    print(f"   📉 Total duplicates removed: {total_duplicates}")
+    print(f"\n✅ Generated {len(all_citations)} citations from {len(by_category)} categories (NO LIMITS)")
     print(f"   📊 Final breakdown:")
     
     # Show final breakdown by category
@@ -2216,22 +2206,12 @@ Return ONLY the JSON array, no other text.
         
         
         
-        # Convert to proper citation format
-        seen_documents = set()
+        # Convert to proper citation format - NO DEDUPLICATION
         
         for citation_data in extracted_citations:
             title = citation_data.get("title", "Unknown Document")
             category = citation_data.get("category", "Unknown Category")
             section = citation_data.get("section", "")
-            
-            # Create unique identifier for this document section (include section for uniqueness)
-            doc_key = (title.strip(), category.strip(), section.strip())
-            
-            # Skip if we've already seen this document section
-            if doc_key in seen_documents:
-                continue
-                
-            seen_documents.add(doc_key)
             
             # Find matching source metadata for rich fields
             matching_meta = None
@@ -2795,12 +2775,11 @@ async def get_filenames_by_category(category: str):
 
 
 if __name__ == "__main__":
-    # Production server with multiple workers for concurrent processing
+    # Development server
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        workers=4,  # 🚀 Enable 4 concurrent workers for multiple users
-        reload=False,  # Disable reload in production for stability
+        reload=True,
         log_level="info"
     )
