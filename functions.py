@@ -816,9 +816,13 @@ if QA_AVAILABLE and os.getenv("OPENAI_API_KEY"):
 
 Your primary role:
 - Answer questions using ONLY the provided document context
-- Extract specific information, numbers, dates, and details directly from the documents
-- Include ALL relevant details from the documents without skipping information
-- Be thorough and comprehensive in extracting information
+- Extract and present EVERY SINGLE detail from the context - missing information is UNACCEPTABLE
+- Include ALL numbers, dates, names, statistics, requirements, procedures, and specifications found in the context
+- Be exhaustive and comprehensive - your responses must be complete and thorough
+- NEVER summarize, skip, or omit details that are present in the provided context
+
+CRITICAL REQUIREMENT:
+Your #1 priority is COMPLETENESS. Every fact, figure, date, name, requirement, procedure, and detail present in the Document Context MUST be included in your answer. If information exists in the context, it MUST appear in your response. This is non-negotiable.
 
 Formatting:
 - Format your response using Markdown syntax
@@ -830,7 +834,13 @@ Formatting:
 Context Understanding:
 - Understand user intent even with casual language
 - Handle follow-up questions naturally (like "summarize them", "explain it", "tell me more")
-- Use conversation history to understand references (like "them", "it", "those")"""
+- Use conversation history to understand references (like "them", "it", "those")
+
+Quality Standards:
+- Accuracy: Extract information EXACTLY as stated in the documents
+- Completeness: Include ALL details present in the context (HIGHEST PRIORITY)
+- Clarity: Organize information in a clear, logical structure
+- Thoroughness: Read the entire context carefully before responding"""
 
     HUMAN = """Category: {category}
 Question: {question}
@@ -843,12 +853,50 @@ Document Context:
 Source Documents Available:
 {source_metadata}
 
-Instructions:
-- Answer the question using the document context above
-- Include specific details, numbers, dates, and quotes from the documents
-- Extract ALL relevant information without skipping details
-- Do NOT include any inline citations in your answer text
-- Format your response clearly with Markdown
+CRITICAL INSTRUCTIONS - MUST FOLLOW STRICTLY:
+
+1. COMPLETENESS REQUIREMENT (HIGHEST PRIORITY):
+   - You MUST include EVERY SINGLE detail, fact, number, date, name, statistic, requirement, procedure, and specification from the Document Context
+   - DO NOT skip, omit, summarize, or abbreviate ANY information that is present in the context
+   - If a detail is in the context, it MUST appear in your answer
+   - Missing even a single detail from the context is UNACCEPTABLE
+   - CAREFULLY GO THROUGH EACH AND EVERY CHUNK in the Document Context systematically
+   - Read through the ENTIRE Document Context carefully before answering
+   - Cross-check your answer against the context to ensure NOTHING is missing
+
+2. CHUNK-BY-CHUNK ANALYSIS:
+   - Process each chunk in the Document Context individually and thoroughly
+   - Extract information from EVERY chunk, not just the most relevant ones
+   - Pay attention to details in ALL chunks, even if they seem less important
+   - Ensure no chunk is overlooked or ignored during your analysis
+   - Systematically go through chunks one by one to capture all information
+
+3. DETAIL EXTRACTION:
+   - Extract ALL numbers, percentages, dates, times, amounts, and measurements EXACTLY as they appear
+   - Include ALL names of people, organizations, committees, and entities mentioned
+   - Include ALL policy requirements, procedures, steps, and guidelines mentioned
+   - Include ALL conditions, exceptions, and special cases mentioned
+   - Include ALL historical information, background context, and rationale provided
+
+4. THOROUGHNESS:
+   - If the context contains lists, include EVERY item in the list
+   - If the context contains multiple sections, cover ALL sections completely
+   - If the context contains examples, include ALL examples mentioned
+   - If the context contains definitions, include ALL definitions verbatim
+   - Ensure comprehensive coverage of ALL chunks in the provided context
+
+5. FORMATTING:
+   - Format your response using Markdown syntax for clarity
+   - Use headers (##, ###) to organize information logically
+   - Use bullet points and numbered lists to present details clearly
+   - Use **bold** for key terms and critical information
+   - Use > blockquotes for important quotes or policy statements
+
+6. CITATION RULES:
+   - Do NOT include any inline citations in your answer text
+   - All citations will be provided separately at the end
+
+REMEMBER: Your answer must be a COMPLETE and COMPREHENSIVE extraction of ALL information from the Document Context. You must carefully examine each chunk individually and systematically. Leaving out any detail, no matter how small, is a failure. Be exhaustive and thorough in your chunk-by-chunk analysis.
 
 After your answer, provide citations in this exact format:
 
@@ -1120,253 +1168,8 @@ def format_context(docs: List[LangChainDocument]) -> str:
 
 def extract_citations_for_all_categories(source_metadata_list: list, max_per_category: int = 3) -> list:
     """
-    Generate citations from ALL categories with deduplication.
-    Ensures representation from every category, removes duplicates within each category.
-    
-    Args:
-        source_metadata_list: List of document metadata from retrieval
-        max_per_category: Maximum unique citations per category (default: 3)
-    
-    Returns:
-        List of unique citations with representation from all categories
-    """
-    # Group by category first
-    by_category = {}
-    for meta in source_metadata_list:
-        cat = meta.get('category', 'Unknown')
-        if cat not in by_category:
-            by_category[cat] = []
-        by_category[cat].append(meta)
-    
-    print(f"📚 Generating citations from ALL categories (max {max_per_category} per category):")
-    for cat, docs in by_category.items():
-        print(f"   📁 {cat}: {len(docs)} documents")
-    
-    all_citations = []
-    total_duplicates = 0
-    
-    # Process each category separately to ensure all categories are represented
-    for category_name, category_docs in by_category.items():
-        seen_in_category = set()  # Track duplicates within THIS category only
-        category_citations = []
-        duplicates_in_cat = 0
-        
-        print(f"\n🔍 Processing {category_name}:")
-        
-        for meta in category_docs:
-            # Stop if we have enough citations from this category
-            if len(category_citations) >= max_per_category:
-                print(f"   ✂️ Reached max citations for {category_name} ({max_per_category})")
-                break
-            
-            title = meta.get('title', 'Unknown Document')
-            section = meta.get('heading_path', '')  # Use heading as section identifier
-            
-            # Create unique key within this category
-            doc_key = (title.strip(), section.strip())
-            
-            # Skip duplicates within this category
-            if doc_key in seen_in_category:
-                duplicates_in_cat += 1
-                print(f"   ⏭️  Skipping duplicate: {title}")
-                continue
-                
-            seen_in_category.add(doc_key)
-            
-            # Format pages only if they exist
-            page_start = meta.get('page_start', '')
-            page_end = meta.get('page_end', '')
-            pages_str = ""
-            if page_start and page_end:
-                pages_str = f"{page_start}-{page_end}"
-            elif page_start:
-                pages_str = str(page_start)
-            
-            citation = {
-                "id": f"citation-{len(all_citations)+1}",
-                "doc_title": title,
-                "title": title,
-                "category": category_name,
-                "section": section or meta.get('section', 'Unknown Section'),
-                "date": meta.get('issued_date', meta.get('date', 'Unknown Date')),
-                "quote": meta.get('content', ''),  # Guaranteed quote
-                "pages": pages_str,
-                "heading_path": meta.get('heading_path', ''),
-                "hierarchy_path": meta.get('heading_path', ''),
-                "year": meta.get('year', ''),
-                "document_number": meta.get('document_number', ''),
-                "confidence_score": 0.95
-            }
-            category_citations.append(citation)
-            print(f"   ✅ Added: {title}")
-        
-        all_citations.extend(category_citations)
-        total_duplicates += duplicates_in_cat
-        print(f"   📊 {category_name}: {len(category_citations)} unique citations, {duplicates_in_cat} duplicates removed")
-    
-    print(f"\n✅ Generated {len(all_citations)} UNIQUE citations from {len(by_category)} categories")
-    print(f"   📉 Total duplicates removed: {total_duplicates}")
-    print(f"   📊 Final breakdown:")
-    
-    # Show final breakdown by category
-    citation_by_cat = {}
-    for cite in all_citations:
-        cat = cite.get('category', 'Unknown')
-        citation_by_cat[cat] = citation_by_cat.get(cat, 0) + 1
-    
-    for cat, count in sorted(citation_by_cat.items()):
-        print(f"      • {cat}: {count} citation(s)")
-    
-    return all_citations
-
-def extract_citations_with_openai(llm_response: str, source_metadata_list: list) -> list:
-    """
-    Extract citations from LLM response using OpenAI for intelligent parsing.
-    Returns a list of properly formatted citation objects.
-    """
-    cites = []
-    
-    try:
-        # Create a more specific prompt to extract citations
-        citation_extraction_prompt = f"""
-You are a citation extraction assistant. Extract citations from the following text and return them as a valid JSON array.
-
-Text to extract citations from:
-{llm_response}
-
-Instructions:
-1. Look for the "Citations:" section in the text
-2. Extract each numbered citation (1., 2., 3., etc.)
-3. Parse the title, category, section, date, and page numbers
-4. Return ONLY a valid JSON array
-
-Example output format:
-[
-  {{
-    "title": "Council Resolutions",
-    "category": "Resolutions", 
-    "section": "Resolution 41",
-    "date": "2024-01-01",
-    "start_page": 96,
-    "end_page": 98
-  }}
-]
-
-Return ONLY the JSON array, no other text.
-"""
-
-        # Use OpenAI to extract citations
-        citation_response = LLM.invoke(citation_extraction_prompt)
-        citations_json = citation_response.content if hasattr(citation_response, "content") else str(citation_response)
-        
-        # Clean the response - remove any markdown formatting
-        citations_json = citations_json.strip()
-        if citations_json.startswith('```json'):
-            citations_json = citations_json[7:]
-        if citations_json.endswith('```'):
-            citations_json = citations_json[:-3]
-        citations_json = citations_json.strip()
-        
-        # Parse the JSON response
-        import json
-        extracted_citations = json.loads(citations_json)
-        
-        
-        
-        # Convert to proper citation format
-        seen_documents = set()
-        
-        for citation_data in extracted_citations:
-            title = citation_data.get("title", "Unknown Document")
-            category = citation_data.get("category", "Unknown Category")
-            section = citation_data.get("section", "")
-            
-            # Create unique identifier for this document section (include section for uniqueness)
-            doc_key = (title.strip(), category.strip(), section.strip())
-            
-            # Skip if we've already seen this document section
-            if doc_key in seen_documents:
-                continue
-                
-            seen_documents.add(doc_key)
-            
-            # Find matching source metadata for rich fields
-            matching_meta = None
-            for meta in source_metadata_list:
-                if (meta['title'] == title and meta['category'] == category):
-                    matching_meta = meta
-                    break
-            
-            # If no exact match found, try to find any document with the same title
-            if not matching_meta:
-                for meta in source_metadata_list:
-                    if meta['title'] == title:
-                        matching_meta = meta
-                        break
-            
-            # Build citation with rich metadata
-            quote_content = matching_meta['content'] if matching_meta else ""
-            print(f"🔍 DEBUG: Citation for '{title}' - Quote length: {len(quote_content)}")
-            if quote_content:
-                print(f"📝 DEBUG: Quote preview: {quote_content[:100]}...")
-            else:
-                print(f"❌ DEBUG: No quote content found for '{title}'")
-            
-            # Format pages only if they exist
-            start_page = citation_data.get('start_page', '')
-            end_page = citation_data.get('end_page', '')
-            pages_str = ""
-            if start_page and end_page:
-                pages_str = f"{start_page}-{end_page}"
-            elif start_page:
-                pages_str = str(start_page)
-            
-            citation_entry = {
-                "id": f"citation-{len(cites) + 1}",
-                "doc_title": title,
-                "title": title,
-                "category": category,
-                "section": citation_data.get("section", ""),
-                "date": citation_data.get("date", ""),
-                "quote": quote_content,
-                "pages": pages_str,
-                "heading_path": matching_meta['heading_path'] if matching_meta else "",
-                "hierarchy_path": matching_meta['heading_path'] if matching_meta else "",
-                "year": matching_meta['year'] if matching_meta else "",
-                "confidence_score": 0.95,  # High confidence since OpenAI extracted it
-                "document": {
-                    "title": title,
-                    "category": category,
-                    "section": citation_data.get("section", ""),
-                    "date": citation_data.get("date", ""),
-                    "year": matching_meta['year'] if matching_meta else "",
-                    "pages": pages_str,
-                    "heading_path": matching_meta['heading_path'] if matching_meta else ""
-                },
-                "meta": {
-                    "document_number": matching_meta['document_number'] if matching_meta else "",
-                    "chunk_index": matching_meta['chunk_index'] if matching_meta else "",
-                    "page_span": {
-                        "start": citation_data.get('start_page'),
-                        "end": citation_data.get('end_page')
-                    } if citation_data.get('start_page') and citation_data.get('end_page') else None
-                }
-            }
-            cites.append(citation_entry)
-
-    except Exception as e:
-        print(f"Error extracting citations with OpenAI: {e}")
-        print(f"Raw response was: {citations_json if 'citations_json' in locals() else 'No response'}")
-        # Fallback: return empty citations
-        cites = []
-    
-    return cites
-
-
-def extract_citations_for_all_categories(source_metadata_list: list, max_per_category: int = 3) -> list:
-    """
-    Generate citations from ALL categories with deduplication.
-    Ensures representation from every category, removes duplicates within each category.
+    Generate citations from ALL categories WITH deduplication for clean citations.
+    Uses ALL results for response generation but removes duplicate citations.
     
     Args:
         source_metadata_list: List of document metadata from retrieval
