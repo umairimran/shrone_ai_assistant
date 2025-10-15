@@ -22,8 +22,26 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className="dark">
-      <body className={inter.className}>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const theme = localStorage.getItem('shrone-chatbot-theme') || 'dark';
+                const resolvedTheme = theme === 'system' 
+                  ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                  : theme;
+                document.documentElement.classList.add(resolvedTheme);
+                document.documentElement.style.colorScheme = resolvedTheme;
+              } catch (e) {
+                document.documentElement.classList.add('dark');
+              }
+            `,
+          }}
+        />
+      </head>
+      <body className={inter.className} suppressHydrationWarning>
         <ThemeProvider>
           {children}
         </ThemeProvider>
