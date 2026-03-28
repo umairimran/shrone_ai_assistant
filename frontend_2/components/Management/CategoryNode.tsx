@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { YearNode } from './YearNode';
 import { CategoryTreeNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface CategoryNodeProps {
   node: CategoryTreeNode;
@@ -18,7 +17,6 @@ interface CategoryNodeProps {
   onDocumentDelete?: (documentId: string) => Promise<boolean>;
   onDeleteYearFolder?: (categoryId: string, year: string) => void;
   onUploadNewVersion?: (document: any) => void;
-  // onDeleteCategory?: (categoryId: string) => void;
 }
 
 export function CategoryNode({
@@ -33,14 +31,7 @@ export function CategoryNode({
   onDocumentDelete,
   onDeleteYearFolder,
   onUploadNewVersion
-  // onDeleteCategory
 }: CategoryNodeProps) {
-  // const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  // const [showDeleteWarning, setShowDeleteWarning] = useState(false);
-  // const [isDeleting, setIsDeleting] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-  // const [warningMessage, setWarningMessage] = useState('');
-
   const handleCategoryToggle = () => {
     onToggleCategory(node.id);
   };
@@ -50,57 +41,13 @@ export function CategoryNode({
     onNewYearFolder(node.id);
   };
 
-  // COMMENTED OUT: Fixed categories only - no category deletion allowed
-  // const handleDeleteCategory = (e: React.MouseEvent) => {
-  //   e.stopPropagation();
-  //   
-  //   // Check if category is empty (no year folders and no documents)
-  //   const hasYearFolders = node.yearFolders && node.yearFolders.length > 0;
-  //   const hasDocuments = node.documentCount > 0;
-  //   
-  //   if (hasYearFolders || hasDocuments) {
-  //     // Category is not empty - show warning
-  //     let message = "This category cannot be deleted because it contains ";
-  //     if (hasYearFolders && hasDocuments) {
-  //       message += `${node.yearFolders.length} folder(s) and ${node.documentCount} document(s).`;
-  //     } else if (hasYearFolders) {
-  //       message += `${node.yearFolders.length} folder(s).`;
-  //     } else {
-  //       message += `${node.documentCount} document(s).`;
-  //     }
-  //     
-  //     setWarningMessage(message);
-  //     setShowDeleteWarning(true);
-  //   } else {
-  //     // Category is empty - show confirmation
-  //     setShowDeleteConfirm(true);
-  //   }
-  // };
-
-  // COMMENTED OUT: Fixed categories only - no category deletion allowed
-  // const confirmDelete = async () => {
-  //   if (!onDeleteCategory) return;
-  //   
-  //   setIsDeleting(true);
-  //   try {
-  //     await onDeleteCategory(node.id);
-  //     setShowDeleteConfirm(false);
-  //   } catch (error) {
-  //     console.error('Failed to delete category:', error);
-  //   } finally {
-  //     setIsDeleting(false);
-  //   }
-  // };
-
   return (
     <div className="select-none">
       {/* Category Header */}
       <div
         onClick={handleCategoryToggle}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          'flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-3 rounded-md cursor-pointer transition-colors overflow-hidden group',
+          'flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-3 rounded-md cursor-pointer transition-colors overflow-hidden',
           'hover:bg-gray-100 dark:hover:bg-gray-800',
           isExpanded && 'bg-gray-50 dark:bg-gray-800/50'
         )}
@@ -141,22 +88,17 @@ export function CategoryNode({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {/* New Year Folder Button */}
-          {isExpanded && (
-            <button
-              onClick={handleNewYearFolder}
-              className="px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
-              title="Add new year folder"
-            >
-              <span className="hidden sm:inline">+ New Year Folder</span>
-              <span className="sm:hidden">+ Year</span>
-            </button>
-          )}
-
-          {/* COMMENTED OUT: Fixed categories only - no category deletion allowed */}
-        </div>
+        {/* New Year Folder Button */}
+        {isExpanded && (
+          <button
+            onClick={handleNewYearFolder}
+            className="flex-shrink-0 px-2 py-1 text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded transition-colors whitespace-nowrap"
+            title="Add new year folder"
+          >
+            <span className="hidden sm:inline">+ New Year Folder</span>
+            <span className="sm:hidden">+ Year</span>
+          </button>
+        )}
       </div>
 
       {/* Year Folders */}
@@ -187,9 +129,6 @@ export function CategoryNode({
           )}
         </div>
       )}
-
-      {/* COMMENTED OUT: Fixed categories only - no category deletion allowed */}
-      {/* Delete confirmation and warning dialogs removed */}
     </div>
   );
 }

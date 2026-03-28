@@ -18,14 +18,16 @@ export function CreateCategoryModal({
   className
 }: CreateCategoryModalProps) {
   const [formData, setFormData] = useState({
-    name: ''
+    name: '',
+    description: ''
   });
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
     setFormData({
-      name: ''
+      name: '',
+      description: ''
     });
     setError(null);
   }, []);
@@ -63,7 +65,8 @@ export function CreateCategoryModal({
 
     try {
       await onCreate({
-        name: formData.name.trim()
+        name: formData.name.trim(),
+        description: formData.description.trim() || undefined
       });
       resetForm();
     } catch (error) {
@@ -119,6 +122,22 @@ export function CreateCategoryModal({
                 placeholder="Enter category name"
                 disabled={isCreating}
                 maxLength={100}
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => handleInputChange('description', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white resize-none"
+                placeholder="Optional description for this category"
+                rows={3}
+                disabled={isCreating}
+                maxLength={500}
               />
             </div>
 

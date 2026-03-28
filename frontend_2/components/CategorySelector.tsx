@@ -4,14 +4,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useEnhancedChat } from '@/context/EnhancedChatContext';
 
-// Temporarily disabled - only showing "All Categories"
 const categories = [
   'All Categories',
-  // 'Board and Committee Proceedings',
-  // 'Bylaws & Governance Policies',
-  // 'External Advocacy &  Communications',
-  // 'Policy & Position Statements',
-  // 'Resolutions'
+  'Board and Committee Proceedings',
+  'Bylaws & Governance Policies',
+  'External Advocacy &  Communications',
+  'Policy & Position Statements',
+  'Resolutions'
 ];
 
 export function CategorySelector() {
@@ -53,20 +52,17 @@ export function CategorySelector() {
         Select document category
       </label>
       
-      {/* Dropdown Button - Disabled when only one category */}
+      {/* Dropdown Button */}
       <button
         id="category-selector"
         type="button"
-        onClick={() => categories.length > 1 && setIsOpen(!isOpen)}
-        disabled={categories.length === 1}
+        onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'w-full flex items-center justify-between px-4 py-2 text-left',
-          'bg-blue-600 border border-blue-600 rounded-lg',
+          'bg-blue-600 hover:bg-blue-700 border border-blue-600 rounded-lg',
           'text-white text-sm font-medium shadow-sm',
-          'transition-all duration-200',
-          categories.length > 1 
-            ? 'hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 cursor-pointer'
-            : 'cursor-default opacity-90'
+          'focus:outline-none focus:ring-2 focus:ring-blue-500/50',
+          'transition-all duration-200'
         )}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -77,23 +73,21 @@ export function CategorySelector() {
           </svg>
           <span className="truncate">{activeCategory}</span>
         </div>
-        {categories.length > 1 && (
-          <svg 
-            className={cn(
-              'w-4 h-4 text-white flex-shrink-0 transition-transform duration-200',
-              isOpen && 'rotate-180'
-            )}
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        )}
+        <svg 
+          className={cn(
+            'w-4 h-4 text-white flex-shrink-0 transition-transform duration-200',
+            isOpen && 'rotate-180'
+          )}
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
       </button>
 
-      {/* Dropdown Menu - Only show if multiple categories */}
-      {isOpen && categories.length > 1 && (
+      {/* Dropdown Menu */}
+      {isOpen && (
         <div 
           className={cn(
             'absolute z-50 mt-2 w-full rounded-lg border border-gray-200 dark:border-gray-700',

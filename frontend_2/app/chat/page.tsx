@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ConversationSidebar } from '@/components/Chat/ConversationSidebar';
 import { NewChatButton } from '@/components/Chat/NewChatButton';
 import { ChatHeader } from '@/components/ChatHeader';
@@ -29,11 +29,6 @@ function ChatPageContent() {
   } = useEnhancedChat();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const activeDocumentName = useMemo(() => {
     const activeDoc = documents.find((doc) => doc.id === activeDocumentId);
@@ -44,11 +39,7 @@ function ChatPageContent() {
 
   return (
     <div className="relative min-h-screen bg-white dark:bg-zinc-900">
-      <div 
-        className={`min-h-screen lg:grid lg:grid-cols-[320px_1fr] transition-opacity duration-150 ${
-          mounted ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
+      <div className="min-h-screen lg:grid lg:grid-cols-[320px_1fr]">
         {/* Enhanced Conversation Sidebar */}
         <ConversationSidebar
           onNewChat={startNewConversation}
@@ -98,7 +89,7 @@ function ChatPageContent() {
                 </div>
 
                 {/* Conversation Info */}
-                {mounted && currentConversationId && conversations.length > 0 && messages.length > 0 && (
+                {currentConversationId && conversations.length > 0 && (
                   <div className="text-center">
                     <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 text-xs rounded-full">
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -116,7 +107,7 @@ function ChatPageContent() {
               <MessageList messages={messages} isAssistantTyping={isAssistantTyping} />
 
               {/* Empty State for New Conversation */}
-              {mounted && messages.length === 0 && (
+              {messages.length === 0 && (
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-center max-w-md mx-auto px-4">
                     <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6">

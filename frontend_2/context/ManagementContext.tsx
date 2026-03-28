@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import DocumentCacheService from '@/services/DocumentCacheService';
-import yearFolderService from '@/services/YearFolderService';
 import { DocumentCategory, UploadedDoc, DocumentUploadData } from '@/lib/types';
 import { config } from '@/lib/config';
 
@@ -14,13 +13,9 @@ interface ManagementContextValue {
   getDocumentsByCategory: (categoryId: string) => UploadedDoc[];
   uploadDocument: (data: DocumentUploadData) => Promise<'ok' | 'invalid' | 'failed'>;
   deleteDocument: (documentTitle: string, category: string) => Promise<boolean>;
-  // addCategory: (name: string, description?: string) => void;
-  // deleteCategory: (categoryId: string) => Promise<boolean>;
+  addCategory: (name: string, description?: string) => void;
   addYearFolder: (categoryId: string, year: string) => void;
   removeYearFolder: (categoryId: string, year: string) => void;
-  syncYearFolders: (categoryId: string) => Promise<string[]>;
-  getSyncedYearFolders: (categoryId: string) => Promise<string[]>;
-  syncAllYearFolders: () => Promise<void>;
 }
 
 const ManagementContext = createContext<ManagementContextValue | undefined>(undefined);
@@ -269,56 +264,25 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     }
   }, [initializeCache]);
 
-  // COMMENTED OUT: Fixed categories only - no dynamic category creation
-  // const addCategory = useCallback((name: string, description?: string) => {
-  //   const newCategory: DocumentCategory = {
-  //     id: `custom-${Date.now()}`, // Generate unique ID
-  //     name,
-  //     description,
-  //     documentCount: 0
-  //   };
-  //   
-  //   setCategories(prevCategories => {
-  //     // Check if category already exists
-  //     if (prevCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
-  //       console.warn('Category already exists:', name);
-  //       return prevCategories;
-  //     }
-  //     return [...prevCategories, newCategory];
-  //   });
-  //   
-  //   console.log('✅ Category added:', newCategory);
-  // }, []);
-
-  // COMMENTED OUT: Fixed categories only - no category deletion allowed
-  // const deleteCategory = useCallback(async (categoryId: string): Promise<boolean> => {
-  //   try {
-  //     console.log('🗑️ Deleting category:', categoryId);
-  //     
-  //     // Find the category to get its name
-  //     const category = categories.find(cat => cat.id === categoryId);
-  //     if (!category) {
-  //       console.error('❌ Category not found:', categoryId);
-  //       return false;
-  //     }
-
-  //     // Check if category has documents (optional - warn user)
-  //     if (category.documentCount > 0) {
-  //       console.warn('⚠️ Category has documents, but proceeding with deletion');
-  //     }
-
-  //     // Remove from local state
-  //     setCategories(prevCategories => 
-  //       prevCategories.filter(cat => cat.id !== categoryId)
-  //     );
-  //     
-  //     console.log('✅ Category deleted successfully:', category.name);
-  //     return true;
-  //   } catch (error) {
-  //     console.error('❌ Error deleting category:', error);
-  //     return false;
-  //   }
-  // }, [categories]);
+  const addCategory = useCallback((name: string, description?: string) => {
+    const newCategory: DocumentCategory = {
+      id: `custom-${Date.now()}`, // Generate unique ID
+      name,
+      description,
+      documentCount: 0
+    };
+    
+    setCategories(prevCategories => {
+      // Check if category already exists
+      if (prevCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
+        console.warn('Category already exists:', name);
+        return prevCategories;
+      }
+      return [...prevCategories, newCategory];
+    });
+    
+    console.log('✅ Category added:', newCategory);
+  }, []);
 
   const addYearFolder = useCallback((categoryId: string, year: string) => {
     console.log('📁 Creating year folder for category:', categoryId, 'year:', year);
@@ -408,141 +372,6 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const syncYearFolders = useCallback(async (categoryId: string): Promise<string[]> => {
-    try {
-      const category = categories.find(cat => cat.id === categoryId);
-      if (!category) {
-        console.error('❌ Category not found:', categoryId);
-        return [];
-      }
-
-      console.log(`🔄 Syncing year folders for category: ${category.name}`);
-      const response = await yearFolderService.syncCategoryYears(category.name);
-      
-      if (response.status === 'success' && response.years) {
-        const years = response.years.map(year => year.year);
-        console.log(`✅ Synced ${years.length} years for ${category.name}:`, years);
-        
-        // Update local state with synced years
-        setCategories(prevCategories => {
-          const updatedCategories = prevCategories.map(cat => {
-            if (cat.id === categoryId) {
-              return {
-                ...cat,
-                yearFolders: years.sort((a, b) => parseInt(b) - parseInt(a))
-              };
-            }
-            return cat;
-          });
-          
-          return updatedCategories;
-        });
-        
-        return years;
-      }
-      
-      return [];
-    } catch (error) {
-      console.error(`❌ Error syncing year folders for category ${categoryId}:`, error);
-      return [];
-    }
-  }, [categories]);
-
-  const syncAllYearFolders = useCallback(async (): Promise<void> => {
-    try {
-      console.log('🔄 Syncing all year folders...');
-      
-      // First, refresh the document cache to get latest data
-      console.log('🔄 Refreshing document cache...');
-      await DocumentCacheService.refreshCache();
-      
-      // Sync all categories in parallel
-      const syncPromises = categories.map(async (category) => {
-        try {
-          const response = await yearFolderService.syncCategoryYears(category.name);
-          if (response.status === 'success' && response.years) {
-            const years = response.years.map(year => year.year);
-            console.log(`✅ Synced ${years.length} years for ${category.name}:`, years);
-            return { categoryId: category.id, years: years.sort((a, b) => parseInt(b) - parseInt(a)) };
-          }
-          return { categoryId: category.id, years: [] };
-        } catch (error) {
-          console.error(`❌ Error syncing ${category.name}:`, error);
-          return { categoryId: category.id, years: [] };
-        }
-      });
-
-      const results = await Promise.all(syncPromises);
-      
-      // Update all categories at once - CLEAR old folders first
-      setCategories(prevCategories => {
-        const updatedCategories = prevCategories.map(category => {
-          const result = results.find(r => r.categoryId === category.id);
-          if (result) {
-            // Only set years that actually have documents
-            return {
-              ...category,
-              yearFolders: result.years // This will be empty array if no documents
-            };
-          }
-          // If no result, clear the year folders
-          return {
-            ...category,
-            yearFolders: []
-          };
-        });
-        
-        // Persist to localStorage - only save non-empty year folders
-        try {
-          const yearFoldersData = updatedCategories.reduce((acc, category) => {
-            if (category.yearFolders && category.yearFolders.length > 0) {
-              acc[category.id] = category.yearFolders;
-            }
-            return acc;
-          }, {} as Record<string, string[]>);
-          
-          localStorage.setItem('shrone_year_folders', JSON.stringify(yearFoldersData));
-          console.log('💾 All synced year folders persisted to localStorage:', yearFoldersData);
-        } catch (error) {
-          console.error('❌ Failed to persist synced year folders:', error);
-        }
-        
-        return updatedCategories;
-      });
-      
-      // Force update category counts to reflect new document data
-      updateCategoryCounts();
-      
-      console.log('✅ All year folders synced successfully');
-    } catch (error) {
-      console.error('❌ Error syncing all year folders:', error);
-    }
-  }, [categories, updateCategoryCounts]);
-
-  const getSyncedYearFolders = useCallback(async (categoryId: string): Promise<string[]> => {
-    try {
-      const category = categories.find(cat => cat.id === categoryId);
-      if (!category) {
-        console.error('❌ Category not found:', categoryId);
-        return [];
-      }
-
-      console.log(`📁 Getting synced year folders for category: ${category.name}`);
-      const response = await yearFolderService.getSyncedYears(category.name);
-      
-      if (response.status === 'success' && response.years) {
-        const years = response.years.map(year => year.year);
-        console.log(`✅ Retrieved ${years.length} synced years for ${category.name}:`, years);
-        return years;
-      }
-      
-      return [];
-    } catch (error) {
-      console.error(`❌ Error getting synced year folders for category ${categoryId}:`, error);
-      return [];
-    }
-  }, [categories]);
-
   const value: ManagementContextValue = {
     isCacheReady,
     isLoading,
@@ -551,13 +380,9 @@ export function ManagementProvider({ children }: { children: ReactNode }) {
     getDocumentsByCategory,
     uploadDocument,
     deleteDocument,
-    // addCategory,
-    // deleteCategory,
+    addCategory,
     addYearFolder,
-    removeYearFolder,
-    syncYearFolders,
-    getSyncedYearFolders,
-    syncAllYearFolders
+    removeYearFolder
   };
 
   return (

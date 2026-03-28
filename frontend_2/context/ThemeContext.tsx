@@ -39,20 +39,15 @@ function resolveTheme(theme: Theme): ResolvedTheme {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark');
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('dark');
-  const [mounted, setMounted] = useState(false);
 
-  // Load theme from storage after mount
   useEffect(() => {
     const storedTheme = getStoredTheme();
     const resolved = resolveTheme(storedTheme);
     setThemeState(storedTheme);
     setResolvedTheme(resolved);
-    setMounted(true);
   }, []);
 
-  // Update theme classes
   useEffect(() => {
-    if (!mounted) return;
     const resolved = resolveTheme(theme);
     setResolvedTheme(resolved);
     
